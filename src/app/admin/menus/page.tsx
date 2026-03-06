@@ -23,6 +23,8 @@ import { cn } from "@/lib/utils";
 
 interface MenuRow {
   id?: string;
+  /** 새로 추가한 행 구분용 (DB 저장 시 제외) */
+  clientId?: string;
   type: MenuType;
   item_order: number;
   item_id: string;
@@ -70,45 +72,56 @@ export default function AdminMenusPage() {
   const byType = (type: MenuType) =>
     items.filter((r) => r.type === type).sort((a, b) => a.item_order - b.item_order);
 
-  const handleSaveDefault = async () => {
+  /** 현재 목록 전체를 DB에 저장 (기존 삭제 후 일괄 INSERT) */
+  const handleSaveAll = async () => {
     setSaving(true);
     try {
-      for (const row of items) {
-        if (row.id) continue;
-        await fetch("/api/admin/menus", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: row.type,
-            item_id: row.item_id,
-            label: row.label,
-            href: row.href,
-            icon: row.icon,
-            item_order: row.item_order,
-            badge: row.badge ?? undefined,
-            roles: row.roles ?? undefined,
-            lawtop_module: row.lawtop_module ?? undefined,
-          }),
-        });
-      }
-      toast.success("기본 메뉴가 DB에 저장되었습니다.");
-      fetchMenus();
+      const payload = items.map((row) => ({
+        type: row.type,
+        item_order: row.item_order,
+        item_id: row.item_id,
+        label: row.label,
+        href: row.href,
+        icon: row.icon,
+        badge: row.badge ?? null,
+        roles: row.roles ?? null,
+        lawtop_module: row.lawtop_module ?? null,
+      }));
+      const res = await fetch("/api/admin/menus", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ data: payload }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? "저장 실패");
+      toast.success("메뉴가 DB에 저장되었습니다.");
+      setItems(Array.isArray(json.data) ? json.data : items);
+      setSource(json.source ?? "db");
     } catch (e) {
-      toast.error("저장에 실패했습니다. DB 연결을 확인하세요.");
+      toast.error(e instanceof Error ? e.message : "저장에 실패했습니다. DB 연결을 확인하세요.");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id: string) => {
+  /** DB에 id가 있으면 API 삭제, 없으면 로컬에서만 제거 */
+  const handleDelete = async (row: MenuRow) => {
     if (!confirm("이 메뉴 항목을 삭제하시겠습니까?")) return;
-    try {
-      const res = await fetch(`/api/admin/menus/${id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error((await res.json()).error);
-      toast.success("삭제되었습니다.");
-      fetchMenus();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    if (row.id) {
+      try {
+        const res = await fetch(`/api/admin/menus/${row.id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error((await res.json()).error);
+        toast.success("삭제되었습니다.");
+        fetchMenus();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      }
+    } else {
+      const key = row.clientId ?? row.id ?? `${row.type}-${row.item_id}-${row.item_order}`;
+      setItems((prev) =>
+        prev.filter((r) => (r.clientId ?? r.id ?? `${r.type}-${r.item_id}-${r.item_order}`) !== key)
+      );
+      toast.success("목록에서 제거되었습니다. 저장 버튼을 누르면 DB에 반영됩니다.");
     }
   };
 
@@ -122,64 +135,34 @@ export default function AdminMenusPage() {
     setEditing({
       type,
       item_order: nextOrder,
-      item_id: "",
+      item_id: `menu-${Date.now()}`,
       label: "",
-      href: "",
+      href: "/",
       icon: "FileText",
     });
     setModalOpen(true);
   };
 
-  const handleModalSubmit = async (e: React.FormEvent) => {
+  /** 편집/추가 모달 저장: 로컬 state 반영. 실제 DB 반영은 "저장" 버튼으로 */
+  const handleModalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editing) return;
-    setSaving(true);
-    try {
-      if (editing.id) {
-        const res = await fetch(`/api/admin/menus/${editing.id}`, {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: editing.type,
-            item_id: editing.item_id,
-            label: editing.label,
-            href: editing.href,
-            icon: editing.icon,
-            item_order: editing.item_order,
-            badge: editing.badge ?? undefined,
-            roles: editing.roles ?? undefined,
-            lawtop_module: editing.lawtop_module ?? undefined,
-          }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-        toast.success("수정되었습니다.");
-      } else {
-        const res = await fetch("/api/admin/menus", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: editing.type,
-            item_id: editing.item_id,
-            label: editing.label,
-            href: editing.href,
-            icon: editing.icon,
-            item_order: editing.item_order,
-            badge: editing.badge ?? undefined,
-            roles: editing.roles ?? undefined,
-            lawtop_module: editing.lawtop_module ?? undefined,
-          }),
-        });
-        if (!res.ok) throw new Error((await res.json()).error);
-        toast.success("추가되었습니다.");
-      }
-      setModalOpen(false);
-      setEditing(null);
-      fetchMenus();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "저장에 실패했습니다.");
-    } finally {
-      setSaving(false);
+    if (editing.id) {
+      setItems((prev) =>
+        prev.map((r) => (r.id === editing.id ? { ...editing } : r))
+      );
+      toast.success("수정되었습니다. 아래 저장 버튼을 누르면 DB에 반영됩니다.");
+    } else {
+      const newRow: MenuRow = {
+        ...editing,
+        item_id: editing.item_id || `menu-${Date.now()}`,
+        clientId: `c-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      };
+      setItems((prev) => [...prev, newRow].sort((a, b) => a.item_order - b.item_order));
+      toast.success("추가되었습니다. 아래 저장 버튼을 누르면 DB에 반영됩니다.");
     }
+    setModalOpen(false);
+    setEditing(null);
   };
 
   return (
@@ -191,27 +174,25 @@ export default function AdminMenusPage() {
             메뉴 관리
           </h1>
           <p className="text-sm text-text-muted mt-1">
-            이용자 화면(LNB·모바일)에 노출되는 메뉴를 등록·편집·삭제합니다.
+            이용자 화면(LNB·모바일)에 노출되는 메뉴를 등록·편집·삭제한 뒤 저장하면 DB에 반영됩니다.
           </p>
         </div>
-        {source === "default" && items.length > 0 && (
-          <Button
-            onClick={handleSaveDefault}
-            disabled={saving}
-            leftIcon={<Database size={16} />}
-          >
-            기본 메뉴를 DB에 저장
-          </Button>
-        )}
+        <Button
+          onClick={handleSaveAll}
+          disabled={saving || items.length === 0}
+          leftIcon={<Database size={16} />}
+        >
+          저장
+        </Button>
       </div>
 
       {source === "default" && items.length > 0 && (
-        <div className="flex items-center gap-3 p-4 rounded-xl bg-warning-50 border border-warning-200">
-          <AlertCircle size={20} className="text-warning-600 flex-shrink-0" />
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-100 border border-slate-200">
+          <AlertCircle size={20} className="text-slate-500 shrink-0" />
           <div>
-            <p className="text-sm font-medium text-warning-800">현재 기본 메뉴를 표시 중입니다.</p>
-            <p className="text-xs text-warning-700 mt-0.5">
-              Supabase를 연결한 뒤 위 &quot;기본 메뉴를 DB에 저장&quot;을 누르면 메뉴를 편집·삭제할 수 있습니다.
+            <p className="text-sm font-medium text-slate-700">현재 기본 메뉴를 표시 중입니다.</p>
+            <p className="text-xs text-slate-600 mt-0.5">
+              수정·추가·삭제 후 위 &quot;저장&quot; 버튼을 누르면 Supabase 테이블(site_menus)에 반영됩니다.
             </p>
           </div>
         </div>
@@ -236,11 +217,9 @@ export default function AdminMenusPage() {
                 {type === "mobile_more" && <MoreHorizontal size={18} />}
                 {TYPE_LABELS[type]}
               </h2>
-              {source === "db" && (
-                <Button size="sm" variant="outline" leftIcon={<Plus size={14} />} onClick={() => handleAdd(type)}>
-                  추가
-                </Button>
-              )}
+              <Button size="sm" variant="outline" leftIcon={<Plus size={14} />} onClick={() => handleAdd(type)}>
+                추가
+              </Button>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full">
@@ -251,44 +230,42 @@ export default function AdminMenusPage() {
                     <th className="text-left px-5 py-3">경로</th>
                     <th className="text-left px-5 py-3 w-24">아이콘</th>
                     <th className="text-left px-5 py-3 w-20">배지</th>
-                    {source === "db" && <th className="text-right px-5 py-3 w-24">작업</th>}
+                    <th className="text-right px-5 py-3 w-24">작업</th>
                   </tr>
                 </thead>
                 <tbody>
                   {byType(type).length === 0 ? (
                     <tr>
                       <td colSpan={6} className="px-5 py-6 text-center text-sm text-text-muted">
-                        메뉴가 없습니다. {source === "db" && "추가 버튼으로 등록하세요."}
+                        메뉴가 없습니다. 추가 버튼으로 등록하세요.
                       </td>
                     </tr>
                   ) : (
                     byType(type).map((row) => (
-                      <tr key={row.id ?? `${row.type}-${row.item_id}`} className="border-t border-slate-50 text-sm">
+                      <tr key={row.id ?? (row as MenuRow & { clientId?: string }).clientId ?? `${row.type}-${row.item_id}-${row.item_order}`} className="border-t border-slate-50 text-sm">
                         <td className="px-5 py-3 tabular-nums text-text-muted">{row.item_order}</td>
                         <td className="px-5 py-3 font-medium text-slate-800">{row.label}</td>
                         <td className="px-5 py-3 text-text-muted">{row.href}</td>
                         <td className="px-5 py-3 text-xs text-slate-600">{row.icon}</td>
                         <td className="px-5 py-3">{row.badge != null ? row.badge : "-"}</td>
-                        {source === "db" && row.id && (
-                          <td className="px-5 py-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => handleEdit(row)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-primary-600"
-                              title="편집"
-                            >
-                              <Pencil size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleDelete(row.id!)}
-                              className="p-1.5 rounded-lg text-slate-500 hover:bg-danger-50 hover:text-danger-600 ml-1"
-                              title="삭제"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </td>
-                        )}
+                        <td className="px-5 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleEdit(row)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-primary-600"
+                            title="편집"
+                          >
+                            <Pencil size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(row)}
+                            className="p-1.5 rounded-lg text-slate-500 hover:bg-danger-50 hover:text-danger-600 ml-1"
+                            title="삭제"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
                       </tr>
                     ))
                   )}

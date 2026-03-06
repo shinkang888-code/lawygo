@@ -1,7 +1,14 @@
 "use client";
 
-import { Settings, Palette, Bell, Database, Shield } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Settings, Palette, Bell, Database, Shield, ChevronRight } from "lucide-react";
+
+const cards = [
+  { icon: Palette, title: "테마 및 표시", desc: "다크모드, 폰트, 색상 테마", href: "/admin/settings/theme" },
+  { icon: Bell, title: "알림 설정", desc: "기일 알림 기준일, 이메일/SMS", href: "/admin/settings/notifications" },
+  { icon: Database, title: "DB·API 연동", desc: "Supabase, 그누보드 G6 URL·키", href: "/admin/settings/integration" },
+  { icon: Shield, title: "권한 관리", desc: "역할별 메뉴·데이터 접근 범위", href: "/admin/settings/roles" },
+];
 
 export default function AdminSettingsPage() {
   return (
@@ -17,27 +24,21 @@ export default function AdminSettingsPage() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        {[
-          { icon: Palette, title: "테마 및 표시", desc: "다크모드, 폰트, 색상 테마" },
-          { icon: Bell, title: "알림 설정", desc: "기일 알림 기준일, 이메일/SMS" },
-          { icon: Database, title: "DB·API 연동", desc: "Supabase, 그누보드 G6 URL·키" },
-          { icon: Shield, title: "권한 관리", desc: "역할별 메뉴·데이터 접근 범위" },
-        ].map((item) => (
-          <div
-            key={item.title}
-            className="bg-white rounded-2xl border border-slate-200 shadow-card p-5 flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center">
-                <item.icon size={22} className="text-slate-600" />
+        {cards.map((item) => (
+          <Link key={item.title} href={item.href}>
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-5 flex items-center justify-between hover:border-primary-200 hover:shadow-card-hover transition-all">
+              <div className="flex items-center gap-4">
+                <div className="w-11 h-11 rounded-xl bg-slate-100 flex items-center justify-center">
+                  <item.icon size={22} className="text-slate-600" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-slate-900">{item.title}</h3>
+                  <p className="text-sm text-text-muted">{item.desc}</p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-semibold text-slate-900">{item.title}</h3>
-                <p className="text-sm text-text-muted">{item.desc}</p>
-              </div>
+              <ChevronRight size={20} className="text-slate-400 shrink-0" />
             </div>
-            <Button variant="outline" size="sm">준비 중</Button>
-          </div>
+          </Link>
         ))}
       </div>
     </div>

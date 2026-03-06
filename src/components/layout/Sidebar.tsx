@@ -25,6 +25,7 @@ import {
   TrendingUp,
   Home,
   Search,
+  Send,
 } from "lucide-react";
 import { getMenuForRoles } from "@/lib/menuConfig";
 import { useMenus } from "@/hooks/useMenus";
@@ -48,6 +49,7 @@ const iconMap: Record<string, React.ComponentType<{ size?: number }>> = {
   TrendingUp,
   Home,
   Search,
+  Send,
 };
 
 const currentUser = { name: "김민준", role: "변호사", permissions: ["관리자", "변호사"] };

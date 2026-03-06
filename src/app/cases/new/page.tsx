@@ -2,21 +2,13 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { ArrowLeft, Save, AlertCircle, Users } from "lucide-react";
+import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { mockStaff } from "@/lib/mockData";
-
-const courts = [
-  "서울고등법원", "서울중앙지방법원", "서울동부지방법원", "서울남부지방법원",
-  "서울북부지방법원", "서울서부지방법원", "인천지방법원", "수원지방법원",
-  "의정부지방법원", "춘천지방법원", "대전고등법원", "대전지방법원",
-  "청주지방법원", "부산고등법원", "부산지방법원", "창원지방법원",
-  "대구고등법원", "대구지방법원", "광주고등법원", "광주지방법원", "헌법재판소"
-];
 
 const caseTypes = ["형사", "민사", "행정", "헌법", "가사", "파산/회생", "기타"];
 const positions = ["피고인", "원고", "피고", "신청인", "피신청인", "채권자", "채무자", "청구인", "피청구인", "고소인"];
@@ -45,17 +37,19 @@ export default function NewCasePage() {
   });
 
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const [primaryLawyers, setPrimaryLawyers] = useState<string[]>(["김민준"]);
-  const [assistantStaff, setAssistantStaff] = useState<string[]>([]);
+  const [selectedLawyers, setSelectedLawyers] = useState<string[]>(["김민준"]);
+  const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
+  const [lawyerSearch, setLawyerSearch] = useState("");
+  const [staffSearch, setStaffSearch] = useState("");
 
   const validate = () => {
     const errs: Record<string, string> = {};
     if (!form.caseNumber) errs.caseNumber = "사건번호를 입력하세요.";
     if (!form.caseType) errs.caseType = "사건종류를 선택하세요.";
     if (!form.caseName) errs.caseName = "사건명을 입력하세요.";
-    if (!form.court) errs.court = "법원을 선택하세요.";
+    if (!form.court) errs.court = "기관을 입력하세요.";
     if (!form.clientName) errs.clientName = "의뢰인을 입력하세요.";
-    if (primaryLawyers.length === 0) errs.assignedStaff = "담당 변호사를 1명 이상 선택하세요.";
+    if (selectedLawyers.length === 0) errs.assignedStaff = "담당 변호사를 1명 이상 선택하세요.";
     setErrors(errs);
     return Object.keys(errs).length === 0;
   };
@@ -66,11 +60,10 @@ export default function NewCasePage() {
       toast.error("필수 항목을 모두 입력해주세요.");
       return;
     }
-    const assignedStr = primaryLawyers.join(", ");
-    const assistantsStr = assistantStaff.join(", ");
+    const assignedStr = [...selectedLawyers, ...selectedStaff].join(", ");
 
     toast.success("사건이 성공적으로 등록되었습니다.", {
-      description: `${form.caseNumber} · ${form.caseName} / 담당: ${assignedStr || form.assignedStaff}`,
+      description: `${form.caseNumber} · ${form.caseName} / 담당: ${assignedStr}`,
     });
     setTimeout(() => router.push("/cases"), 800);
   };
@@ -80,17 +73,26 @@ export default function NewCasePage() {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: "" }));
   };
 
-  const togglePrimary = (name: string) => {
-    setPrimaryLawyers((prev) =>
+  const toggleLawyer = (name: string) => {
+    setSelectedLawyers((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
     if (errors.assignedStaff) setErrors((prev) => ({ ...prev, assignedStaff: "" }));
   };
 
-  const toggleAssistant = (name: string) => {
-    setAssistantStaff((prev) =>
+  const toggleStaffMember = (name: string) => {
+    setSelectedStaff((prev) =>
       prev.includes(name) ? prev.filter((n) => n !== name) : [...prev, name]
     );
+  };
+
+  const openScourtSearchPopup = () => {
+    const w = 520;
+    const h = 560;
+    const left = typeof window !== "undefined" ? (window.screen.width - w) / 2 : 0;
+    const top = typeof window !== "undefined" ? (window.screen.height - h) / 2 : 0;
+    const url = `/cases/scourt-search?caseNumber=${encodeURIComponent(form.caseNumber)}&partyName=${encodeURIComponent(form.clientName)}`;
+    window.open(url, "scourt-search", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes`);
   };
 
   return (
@@ -140,17 +142,16 @@ export default function NewCasePage() {
               className={inputClass(!!errors.caseName)}
             />
           </FormField>
-          <FormField label="법원 *" error={errors.court}>
-            <select
+          <FormField label="기관 *" error={errors.court}>
+            <input
+              type="text"
               value={form.court}
               onChange={(e) => update("court", e.target.value)}
+              placeholder="예: 인천지방법원"
               className={inputClass(!!errors.court)}
-            >
-              <option value="">선택</option>
-              {courts.map((c) => <option key={c} value={c}>{c}</option>)}
-            </select>
+            />
           </FormField>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <input
               type="checkbox"
               id="isElectronic"
@@ -161,6 +162,15 @@ export default function NewCasePage() {
             <label htmlFor="isElectronic" className="text-sm text-slate-700 cursor-pointer">
               전자사건 (ELEC)
             </label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={openScourtSearchPopup}
+              className="text-xs"
+            >
+              나의사건검색 연동
+            </Button>
           </div>
         </FormSection>
 
@@ -244,12 +254,25 @@ export default function NewCasePage() {
           </FormField>
         </FormSection>
 
-        <FormSection title="나. 담당자 정보 및 수임료">
+        <FormSection title="나. 담당자">
           <div className="grid grid-cols-2 gap-4">
-            <FormField label="담당 변호사 *" error={errors.assignedStaff}>
-              <div className="border border-slate-200 rounded-lg p-2 space-y-1 max-h-32 overflow-y-auto text-xs">
+            <FormField label="변호사 *" error={errors.assignedStaff}>
+              <input
+                type="text"
+                value={lawyerSearch}
+                onChange={(e) => setLawyerSearch(e.target.value)}
+                placeholder="이름 검색 후 선택"
+                className={cn(inputClass(false), "mb-2")}
+              />
+              <div className="border border-slate-200 rounded-lg p-2 space-y-1 max-h-40 overflow-y-auto text-xs">
                 {mockStaff
                   .filter((s) => s.role === "변호사")
+                  .filter(
+                    (s) =>
+                      !lawyerSearch.trim() ||
+                      s.name.includes(lawyerSearch.trim()) ||
+                      s.department.includes(lawyerSearch.trim())
+                  )
                   .map((s) => (
                     <label
                       key={s.id}
@@ -257,8 +280,8 @@ export default function NewCasePage() {
                     >
                       <input
                         type="checkbox"
-                        checked={primaryLawyers.includes(s.name)}
-                        onChange={() => togglePrimary(s.name)}
+                        checked={selectedLawyers.includes(s.name)}
+                        onChange={() => toggleLawyer(s.name)}
                         className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600"
                       />
                       <span className="text-slate-700">{s.name}</span>
@@ -266,43 +289,57 @@ export default function NewCasePage() {
                     </label>
                   ))}
               </div>
+              {selectedLawyers.length > 0 && (
+                <p className="mt-1.5 text-xs text-text-muted">
+                  선택: {selectedLawyers.join(", ")}
+                </p>
+              )}
             </FormField>
-            <FormField label="수임일">
+            <FormField label="직원">
               <input
-                type="date"
-                value={form.receivedDate}
-                onChange={(e) => update("receivedDate", e.target.value)}
-                className={inputClass(false)}
+                type="text"
+                value={staffSearch}
+                onChange={(e) => setStaffSearch(e.target.value)}
+                placeholder="이름 검색 후 선택"
+                className={cn(inputClass(false), "mb-2")}
               />
+              <div className="border border-slate-200 rounded-lg p-2 space-y-1 max-h-40 overflow-y-auto text-xs">
+                {mockStaff
+                  .filter((s) => s.role !== "변호사")
+                  .filter(
+                    (s) =>
+                      !staffSearch.trim() ||
+                      s.name.includes(staffSearch.trim()) ||
+                      s.department.includes(staffSearch.trim())
+                  )
+                  .map((s) => (
+                    <label
+                      key={s.id}
+                      className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedStaff.includes(s.name)}
+                        onChange={() => toggleStaffMember(s.name)}
+                        className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600"
+                      />
+                      <span className="text-slate-700">{s.name}</span>
+                      <span className="text-[10px] text-text-muted">{s.department}</span>
+                    </label>
+                  ))}
+              </div>
+              {selectedStaff.length > 0 && (
+                <p className="mt-1.5 text-xs text-text-muted">
+                  선택: {selectedStaff.join(", ")}
+                </p>
+              )}
             </FormField>
           </div>
-          <FormField label="보조 직원">
-            <div className="border border-slate-200 rounded-lg p-2 space-y-1 max-h-24 overflow-y-auto text-xs">
-              {mockStaff
-                .filter((s) => s.role !== "변호사")
-                .map((s) => (
-                  <label
-                    key={s.id}
-                    className="flex items-center gap-2 cursor-pointer hover:bg-slate-50 rounded px-1 py-0.5"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={assistantStaff.includes(s.name)}
-                      onChange={() => toggleAssistant(s.name)}
-                      className="w-3.5 h-3.5 rounded border-slate-300 text-primary-600"
-                    />
-                    <span className="text-slate-700">{s.name}</span>
-                    <span className="text-[10px] text-text-muted">{s.department}</span>
-                  </label>
-                ))}
-            </div>
-          </FormField>
-          <FormField label="수임료">
+          <FormField label="수임일">
             <input
-              type="number"
-              value={form.amount}
-              onChange={(e) => update("amount", e.target.value)}
-              placeholder="0"
+              type="date"
+              value={form.receivedDate}
+              onChange={(e) => update("receivedDate", e.target.value)}
               className={inputClass(false)}
             />
           </FormField>

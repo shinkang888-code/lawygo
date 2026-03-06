@@ -5,6 +5,7 @@ import { Header } from "@/components/layout/Header";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Toaster } from "@/components/ui/toast";
 import { KeyboardHints } from "@/components/ui/keyboard-hints";
+import { ThemeInit } from "@/components/ThemeInit";
 
 export const metadata: Metadata = {
   title: "LawGo - 법무 관리 시스템",
@@ -22,6 +23,7 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className="bg-background text-text-primary">
+        <ThemeInit />
         <div className="flex h-screen overflow-hidden">
           {/* 사이드바: lg 이상에서만 노출 */}
           <div className="hidden lg:flex">

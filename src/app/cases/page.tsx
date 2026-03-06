@@ -19,14 +19,28 @@ import {
   Trash2,
   FolderPlus,
   Upload,
+  Pencil,
+  ExternalLink,
 } from "lucide-react";
+import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
 import { mockCases, mockTimeline } from "@/lib/mockData";
 import { cn, formatDate, getDDay, formatAmount } from "@/lib/utils";
-import type { CaseItem, FilterConfig, SortConfig, Timeline, TimelineAttachment } from "@/lib/types";
+import type { CaseItem, FilterConfig, SortConfig, Timeline } from "@/lib/types";
+import {
+  getInitialMemosFromMock,
+  getInitialFilesFromMock,
+  loadCaseMemos,
+  loadCaseFiles,
+  loadCaseFolders,
+  saveCaseMemos,
+  saveCaseFiles,
+  saveCaseFolders,
+  type CaseFile,
+  type CaseFolder,
+} from "@/lib/caseScopedStorage";
 import { StatusBadge, DDayBadge, ElectronicBadge, ImmutableBadge } from "@/components/ui/badge";
 import { StaffChips } from "@/components/cases/StaffChips";
 import { FilterTray } from "@/components/cases/FilterTray";
-import { CaseDrawer } from "@/components/cases/CaseDrawer";
 import { Button } from "@/components/ui/button";
 import { CaseRowSkeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
@@ -48,12 +62,19 @@ const columns: { key: keyof CaseItem; label: string; width?: string; sortable?: 
 
 export default function CasesPage() {
   const searchParams = useSearchParams();
-  const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const initialQ = searchParams.get("q") ?? "";
+  const [search, setSearch] = useState(initialQ);
   const [staffSearch, setStaffSearch] = useState("");
+  /** 적용된 검색어(버튼/Enter 시 반영) - 이 값으로 목록 필터링 */
+  const [appliedSearch, setAppliedSearch] = useState(initialQ);
+  const [appliedStaffSearch, setAppliedStaffSearch] = useState("");
 
   useEffect(() => {
     const q = searchParams.get("q");
-    if (q) setSearch(q);
+    if (q != null) {
+      setSearch(q);
+      setAppliedSearch(q);
+    }
   }, [searchParams]);
   const [filters, setFilters] = useState<FilterConfig[]>([]);
   const [sort, setSort] = useState<SortConfig>({ field: "nextDate", direction: "asc" });
@@ -62,11 +83,54 @@ export default function CasesPage() {
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
   const [isLoading] = useState(false);
 
+  // 사건별 메모/자료실 데이터 (localStorage 연동)
+  const [caseMemos, setCaseMemos] = useState<Record<string, Timeline[]>>(() =>
+    loadCaseMemos(getInitialMemosFromMock(mockTimeline))
+  );
+  const [caseFiles, setCaseFiles] = useState<Record<string, CaseFile[]>>(() =>
+    loadCaseFiles(getInitialFilesFromMock(mockTimeline))
+  );
+  const [caseFolders, setCaseFolders] = useState<Record<string, CaseFolder[]>>(loadCaseFolders);
+
+  const updateMemos = (caseId: string, memos: Timeline[]) => {
+    setCaseMemos((prev) => {
+      const next = { ...prev, [caseId]: memos };
+      saveCaseMemos(next);
+      return next;
+    });
+  };
+  const updateFiles = (caseId: string, files: CaseFile[]) => {
+    setCaseFiles((prev) => {
+      const next = { ...prev, [caseId]: files };
+      saveCaseFiles(next);
+      return next;
+    });
+  };
+  const updateFolders = (caseId: string, folders: CaseFolder[]) => {
+    setCaseFolders((prev) => {
+      const next = { ...prev, [caseId]: folders };
+      saveCaseFolders(next);
+      return next;
+    });
+  };
+
+  const runSearch = () => {
+    setAppliedSearch(search);
+    setAppliedStaffSearch(staffSearch);
+  };
+
+  const clearSearch = () => {
+    setSearch("");
+    setStaffSearch("");
+    setAppliedSearch("");
+    setAppliedStaffSearch("");
+  };
+
   const filtered = useMemo(() => {
     let result = [...mockCases];
 
-    if (search.trim()) {
-      const q = search.toLowerCase();
+    if (appliedSearch.trim()) {
+      const q = appliedSearch.trim().toLowerCase();
       result = result.filter(
         (c) =>
           c.caseNumber.toLowerCase().includes(q) ||
@@ -85,8 +149,8 @@ export default function CasesPage() {
       });
     });
 
-    if (staffSearch.trim()) {
-      const q = staffSearch.trim().toLowerCase();
+    if (appliedStaffSearch.trim()) {
+      const q = appliedStaffSearch.trim().toLowerCase();
       result = result.filter((c) => {
         const main = c.assignedStaff?.toLowerCase() ?? "";
         const assistants = (c.assistants ?? "").toLowerCase();
@@ -102,7 +166,7 @@ export default function CasesPage() {
     });
 
     return result;
-  }, [search, filters, sort]);
+  }, [appliedSearch, appliedStaffSearch, filters, sort]);
 
   const toggleSort = (field: keyof CaseItem) => {
     setSort((prev) =>
@@ -202,7 +266,8 @@ export default function CasesPage() {
           <div>
             <h1 className="text-xl font-bold text-slate-900">사건 관리</h1>
             <p className="text-sm text-text-muted mt-0.5">
-              전체 <span className="text-primary-600 font-semibold">{filtered.length}</span>건
+              {appliedSearch.trim() || appliedStaffSearch.trim() ? "검색 결과 " : "전체 "}
+              <span className="text-primary-600 font-semibold">{filtered.length}</span>건
               {selectedRows.size > 0 && (
                 <span className="ml-2 text-primary-600 font-semibold">{selectedRows.size}건 선택됨</span>
               )}
@@ -242,6 +307,7 @@ export default function CasesPage() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
                 placeholder="사건번호, 의뢰인, 사건명..."
                 className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 focus:bg-white transition-all"
               />
@@ -251,10 +317,17 @@ export default function CasesPage() {
                 type="text"
                 value={staffSearch}
                 onChange={(e) => setStaffSearch(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && runSearch()}
                 placeholder="담당 변호사/보조 직원 이름 검색"
                 className="w-full pl-3 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 focus:bg-white transition-all"
               />
             </div>
+            <Button type="button" size="sm" onClick={runSearch} leftIcon={<Search size={14} />}>
+              검색
+            </Button>
+            <Button type="button" variant="outline" size="sm" onClick={clearSearch}>
+              초기화
+            </Button>
             <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
               <button
                 onClick={() => setViewMode("table")}
@@ -474,36 +547,45 @@ export default function CasesPage() {
         )}
       </div>
 
-      {selectedCase && (
-        <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[260px]">
-          <CaseMemoPanel caseItem={selectedCase} />
-          <CaseDocumentsPanel caseItem={selectedCase} />
-        </div>
-      )}
-
-      <CaseDrawer caseItem={selectedCase} onClose={() => setSelectedCase(null)} />
+      {/* 항상 표시: 좌하단 메모장, 우하단 자료실 (사건 선택 시 해당 사건 데이터로 갱신) */}
+      <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[300px] max-h-[380px] shrink-0">
+        <CaseMemoPanel
+          caseItem={selectedCase}
+          memos={selectedCase ? caseMemos[selectedCase.id] ?? [] : []}
+          onMemosChange={selectedCase ? (memos) => updateMemos(selectedCase.id, memos) : undefined}
+        />
+        <CaseDocumentsPanel
+          caseItem={selectedCase}
+          files={selectedCase ? caseFiles[selectedCase.id] ?? [] : []}
+          folders={selectedCase ? caseFolders[selectedCase.id] ?? [] : []}
+          onFilesChange={selectedCase ? (files) => updateFiles(selectedCase.id, files) : undefined}
+          onFoldersChange={selectedCase ? (folders) => updateFolders(selectedCase.id, folders) : undefined}
+        />
+      </div>
     </div>
   );
 }
 
-function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
-  const initialMemos = useMemo(
-    () => mockTimeline.filter((t) => t.caseId === caseItem.id && t.type === "memo"),
-    [caseItem.id]
-  );
-  const [memos, setMemos] = useState<Timeline[]>(initialMemos);
+function CaseMemoPanel({
+  caseItem,
+  memos,
+  onMemosChange,
+}: {
+  caseItem: CaseItem | null;
+  memos: Timeline[];
+  onMemosChange?: (memos: Timeline[]) => void;
+}) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("10:00");
   const [text, setText] = useState("");
 
   useEffect(() => {
-    setMemos(initialMemos);
     setSelectedId(null);
     setDate(new Date().toISOString().slice(0, 10));
     setTime("10:00");
     setText("");
-  }, [initialMemos]);
+  }, [caseItem?.id]);
 
   const handleSelect = (item: Timeline) => {
     setSelectedId(item.id);
@@ -520,14 +602,13 @@ function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
   };
 
   const handleSave = () => {
-    if (!text.trim()) return;
+    if (!text.trim() || !caseItem || !onMemosChange) return;
     const iso = `${date}T${time}:00Z`;
     if (selectedId) {
-      setMemos((prev) =>
-        prev.map((m) =>
-          m.id === selectedId ? { ...m, content: text, date: iso } : m
-        )
+      const next = memos.map((m) =>
+        m.id === selectedId ? { ...m, content: text, date: iso } : m
       );
+      onMemosChange(next);
       toast.success("메모가 수정되었습니다.");
     } else {
       const newItem: Timeline = {
@@ -540,26 +621,51 @@ function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
         authorName: "담당자",
         date: iso,
       };
-      setMemos((prev) => [newItem, ...prev]);
+      onMemosChange([newItem, ...memos]);
       toast.success("메모가 등록되었습니다.");
     }
     handleReset();
   };
 
   const handleDelete = () => {
-    if (!selectedId) return;
+    if (!selectedId || !onMemosChange) return;
     if (!confirm("선택한 메모를 삭제하시겠습니까?")) return;
-    setMemos((prev) => prev.filter((m) => m.id !== selectedId));
+    onMemosChange(memos.filter((m) => m.id !== selectedId));
     toast.success("메모가 삭제되었습니다.");
     handleReset();
   };
 
+  if (!caseItem) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px] items-center justify-center text-slate-500">
+        <MessageSquare size={32} className="mb-2 text-slate-300" />
+        <p className="text-sm font-medium">좌하단 메모장</p>
+        <p className="text-xs text-text-muted mt-0.5">사건을 선택하면 해당 사건의 메모가 여기에 표시됩니다.</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[240px]">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px]">
       <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 flex-wrap">
           <MessageSquare size={16} className="text-primary-600" />
-          사건 메모 / 히스토리
+          사건 메모 · {caseItem.caseNumber}
+          <Link
+            href={`/cases/${caseItem.id}`}
+            className="text-xs font-normal text-primary-600 hover:underline"
+          >
+            상세 보기
+          </Link>
+          <button
+            type="button"
+            onClick={() => copyAndOpenScourtSearch(caseItem.caseNumber, caseItem.clientName)}
+            className="text-xs font-normal text-slate-500 hover:text-primary-600 inline-flex items-center gap-1"
+            title="사건번호·당사자명을 복사하고 대법원 나의 사건검색을 엽니다"
+          >
+            <ExternalLink size={11} />
+            법원에서 조회
+          </button>
         </div>
       </div>
       <div className="flex flex-1 min-h-0">
@@ -632,11 +738,7 @@ function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
             />
           </div>
           <div className="flex justify-end gap-2 pt-1">
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={handleReset}
-            >
+            <Button size="xs" variant="outline" onClick={handleReset}>
               리셋
             </Button>
             {selectedId && (
@@ -649,11 +751,7 @@ function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
                 삭제
               </Button>
             )}
-            <Button
-              size="xs"
-              onClick={handleSave}
-              disabled={!text.trim()}
-            >
+            <Button size="xs" onClick={handleSave} disabled={!text.trim()}>
               저장
             </Button>
           </div>
@@ -663,104 +761,270 @@ function CaseMemoPanel({ caseItem }: { caseItem: CaseItem }) {
   );
 }
 
-type CaseFile = TimelineAttachment & { local?: boolean };
-
-function CaseDocumentsPanel({ caseItem }: { caseItem: CaseItem }) {
-  const initialFiles = useMemo<CaseFile[]>(() => {
-    const base = mockTimeline
-      .filter((t) => t.caseId === caseItem.id)
-      .flatMap((t) => t.attachments ?? []);
-    return base as CaseFile[];
-  }, [caseItem.id]);
-
-  const [files, setFiles] = useState<CaseFile[]>(initialFiles);
+function CaseDocumentsPanel({
+  caseItem,
+  files,
+  folders,
+  onFilesChange,
+  onFoldersChange,
+}: {
+  caseItem: CaseItem | null;
+  files: CaseFile[];
+  folders: CaseFolder[];
+  onFilesChange?: (files: CaseFile[]) => void;
+  onFoldersChange?: (folders: CaseFolder[]) => void;
+}) {
   const [isDragOver, setIsDragOver] = useState(false);
   const [preview, setPreview] = useState<CaseFile | null>(null);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [newFolderName, setNewFolderName] = useState("");
 
   useEffect(() => {
-    setFiles(initialFiles);
-    setIsDragOver(false);
     setPreview(null);
-  }, [initialFiles]);
+    setCurrentFolderId(null);
+    setEditingFolderId(null);
+  }, [caseItem?.id]);
+
+  if (!caseItem) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px] items-center justify-center text-slate-500">
+        <FileIcon size={32} className="mb-2 text-slate-300" />
+        <p className="text-sm font-medium">우하단 자료실</p>
+        <p className="text-xs text-text-muted mt-0.5">사건을 선택하면 해당 사건의 파일·폴더가 여기에 표시됩니다.</p>
+        <p className="text-[10px] text-text-muted mt-1">드래그 앤 드롭, 폴더 생성/수정/삭제, 미리보기 지원</p>
+      </div>
+    );
+  }
+
+  const canEdit = Boolean(onFilesChange && onFoldersChange);
+  const rootFiles = files.filter((f) => !f.folderId);
+  const folderFiles = currentFolderId ? files.filter((f) => f.folderId === currentFolderId) : rootFiles;
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
+    if (!onFilesChange) return;
     const dropped = Array.from(e.dataTransfer.files);
     if (dropped.length === 0) return;
     const mapped: CaseFile[] = dropped.map((f) => ({
-      id: `file-${Date.now()}-${f.name}`,
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fileName: f.name,
       fileSize: f.size,
       mimeType: f.type || "application/octet-stream",
       url: URL.createObjectURL(f),
       local: true,
+      folderId: currentFolderId ?? undefined,
     }));
-    setFiles((prev) => [...mapped, ...prev]);
+    onFilesChange([...mapped, ...files]);
     toast.success(`${dropped.length}개 파일이 추가되었습니다.`);
   };
 
   const handleBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!onFilesChange) return;
     const selected = Array.from(e.target.files ?? []);
     if (selected.length === 0) return;
     const mapped: CaseFile[] = selected.map((f) => ({
-      id: `file-${Date.now()}-${f.name}`,
+      id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
       fileName: f.name,
       fileSize: f.size,
       mimeType: f.type || "application/octet-stream",
       url: URL.createObjectURL(f),
       local: true,
+      folderId: currentFolderId ?? undefined,
     }));
-    setFiles((prev) => [...mapped, ...prev]);
+    onFilesChange([...mapped, ...files]);
     toast.success(`${selected.length}개 파일이 추가되었습니다.`);
     e.target.value = "";
   };
 
-  const handleDelete = (file: CaseFile) => {
+  const handleDeleteFile = (file: CaseFile) => {
+    if (!onFilesChange) return;
     if (!confirm("선택한 파일을 삭제하시겠습니까?")) return;
-    setFiles((prev) => prev.filter((f) => f.id !== file.id));
-    if (file.local) URL.revokeObjectURL(file.url);
+    onFilesChange(files.filter((f) => f.id !== file.id));
+    if (file.local && file.url) URL.revokeObjectURL(file.url);
     if (preview?.id === file.id) setPreview(null);
+    toast.success("파일이 삭제되었습니다.");
+  };
+
+  const handleCreateFolder = () => {
+    if (!onFoldersChange || !newFolderName.trim()) return;
+    const newFolder: CaseFolder = {
+      id: `folder-${Date.now()}`,
+      name: newFolderName.trim(),
+      caseId: caseItem.id,
+      createdAt: new Date().toISOString(),
+    };
+    onFoldersChange([...folders, newFolder]);
+    setNewFolderName("");
+    toast.success("폴더가 생성되었습니다.");
+  };
+
+  const handleRenameFolder = (folder: CaseFolder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+  };
+
+  const handleSaveRenameFolder = () => {
+    if (!onFoldersChange || !editingFolderId || !editingFolderName.trim()) return;
+    onFoldersChange(
+      folders.map((f) => (f.id === editingFolderId ? { ...f, name: editingFolderName.trim() } : f))
+    );
+    setEditingFolderId(null);
+    setEditingFolderName("");
+    toast.success("폴더명이 수정되었습니다.");
+  };
+
+  const handleDeleteFolder = (folder: CaseFolder) => {
+    if (!onFoldersChange || !onFilesChange) return;
+    if (!confirm(`폴더 "${folder.name}"을(를) 삭제하시겠습니까? 안의 파일은 루트로 이동됩니다.`)) return;
+    onFoldersChange(folders.filter((f) => f.id !== folder.id));
+    onFilesChange(
+      files.map((f) => (f.folderId === folder.id ? { ...f, folderId: undefined } : f))
+    );
+    if (currentFolderId === folder.id) setCurrentFolderId(null);
+    toast.success("폴더가 삭제되었습니다.");
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[240px]">
-      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px]">
+      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 flex-wrap">
           <FileIcon size={16} className="text-primary-600" />
-          사건문서함
+          자료실 · {caseItem.caseNumber}
+          <Link
+            href={`/cases/${caseItem.id}`}
+            className="text-xs font-normal text-primary-600 hover:underline"
+          >
+            상세 보기
+          </Link>
+          <button
+            type="button"
+            onClick={() => copyAndOpenScourtSearch(caseItem.caseNumber, caseItem.clientName)}
+            className="text-xs font-normal text-slate-500 hover:text-primary-600 inline-flex items-center gap-1"
+            title="사건번호·당사자명을 복사하고 대법원 나의 사건검색을 엽니다"
+          >
+            <ExternalLink size={11} />
+            법원에서 조회
+          </button>
         </div>
-        <div className="flex items-center gap-2 text-xs text-text-muted">
-          <FolderPlus size={14} className="text-slate-400" />
-          <span>폴더 생성은 추후 연동</span>
-        </div>
+        {canEdit && (
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
+              <input
+                type="text"
+                value={newFolderName}
+                onChange={(e) => setNewFolderName(e.target.value)}
+                placeholder="새 폴더명"
+                className="w-28 px-2 py-1 text-xs border border-slate-200 rounded-lg"
+                onKeyDown={(e) => e.key === "Enter" && handleCreateFolder()}
+              />
+              <button
+                type="button"
+                onClick={handleCreateFolder}
+                disabled={!newFolderName.trim()}
+                className="p-1 rounded hover:bg-slate-100 text-slate-600 disabled:opacity-50"
+                title="폴더 추가"
+              >
+                <FolderPlus size={14} />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       <div className="flex flex-1 min-h-0">
-        <div className="flex-1 border-r border-slate-100 flex flex-col">
+        {/* 폴더 목록 */}
+        <div className="w-36 border-r border-slate-100 flex flex-col overflow-hidden">
+          <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-500 uppercase">폴더</div>
+          <div className="flex-1 overflow-y-auto text-xs">
+            <button
+              type="button"
+              onClick={() => setCurrentFolderId(null)}
+              className={cn(
+                "w-full text-left px-2 py-1.5 rounded-r",
+                !currentFolderId ? "bg-primary-50 text-primary-700 font-medium" : "hover:bg-slate-50 text-slate-700"
+              )}
+            >
+              전체 / 루트
+            </button>
+            {folders.map((folder) => (
+              <div
+                key={folder.id}
+                className={cn(
+                  "group flex items-center gap-1 w-full text-left px-2 py-1.5 rounded-r",
+                  currentFolderId === folder.id ? "bg-primary-50 text-primary-700 font-medium" : "hover:bg-slate-50 text-slate-700"
+                )}
+              >
+                {editingFolderId === folder.id ? (
+                  <input
+                    type="text"
+                    value={editingFolderName}
+                    onChange={(e) => setEditingFolderName(e.target.value)}
+                    onBlur={handleSaveRenameFolder}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveRenameFolder();
+                      if (e.key === "Escape") setEditingFolderId(null);
+                    }}
+                    className="flex-1 min-w-0 px-1 py-0.5 text-xs border rounded"
+                    autoFocus
+                  />
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => setCurrentFolderId(folder.id)}
+                      className="flex-1 min-w-0 truncate text-left"
+                    >
+                      {folder.name}
+                    </button>
+                    {canEdit && (
+                      <span className="flex gap-0.5 opacity-0 group-hover:opacity-100">
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleRenameFolder(folder); }}
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-500"
+                          title="이름 변경"
+                        >
+                          <Pencil size={10} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteFolder(folder); }}
+                          className="p-0.5 rounded hover:bg-danger-50 text-danger-500"
+                          title="삭제"
+                        >
+                          <Trash2 size={10} />
+                        </button>
+                      </span>
+                    )}
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex-1 border-r border-slate-100 flex flex-col min-w-0">
           <div
             className={cn(
-              "px-4 py-2 text-xs border-b border-slate-100 flex items-center justify-between",
+              "px-4 py-2 text-xs border-b border-slate-100 flex items-center justify-between flex-wrap gap-2",
               isDragOver ? "bg-primary-50 border-primary-200" : "bg-slate-50"
             )}
           >
             <span className="text-slate-600">
-              파일을 이 영역으로 끌어오거나, 오른쪽 버튼으로 선택해 업로드하세요.
+              파일을 끌어다 놓거나 버튼으로 추가하세요.
             </span>
-            <label className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-xs cursor-pointer hover:bg-slate-50">
-              <Upload size={13} className="text-slate-500" />
-              파일 선택
-              <input type="file" multiple className="hidden" onChange={handleBrowse} />
-            </label>
+            {canEdit && (
+              <label className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-xs cursor-pointer hover:bg-slate-50">
+                <Upload size={13} className="text-slate-500" />
+                파일 선택
+                <input type="file" multiple className="hidden" onChange={handleBrowse} />
+              </label>
+            )}
           </div>
           <div
-            className={cn(
-              "flex-1 overflow-y-auto text-xs",
-              isDragOver && "bg-primary-50"
-            )}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setIsDragOver(true);
-            }}
+            className={cn("flex-1 overflow-y-auto text-xs", isDragOver && "bg-primary-50")}
+            onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
             onDragLeave={() => setIsDragOver(false)}
             onDrop={handleDrop}
           >
@@ -770,12 +1034,11 @@ function CaseDocumentsPanel({ caseItem }: { caseItem: CaseItem }) {
                   <th className="px-3 py-2 text-left w-6" />
                   <th className="px-3 py-2 text-left">문서명</th>
                   <th className="px-3 py-2 text-left w-24">크기</th>
-                  <th className="px-3 py-2 text-left w-28">유형</th>
                   <th className="px-3 py-2 text-right w-20">작업</th>
                 </tr>
               </thead>
               <tbody>
-                {files.map((file) => (
+                {(currentFolderId ? folderFiles : rootFiles).map((file) => (
                   <tr
                     key={file.id}
                     className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
@@ -784,46 +1047,34 @@ function CaseDocumentsPanel({ caseItem }: { caseItem: CaseItem }) {
                     <td className="px-3 py-1.5 align-top">
                       <FileIcon size={14} className="text-slate-400" />
                     </td>
-                    <td className="px-3 py-1.5 text-slate-800 truncate">
-                      {file.fileName}
-                    </td>
+                    <td className="px-3 py-1.5 text-slate-800 truncate">{file.fileName}</td>
                     <td className="px-3 py-1.5 text-text-muted tabular-nums">
                       {Math.round(file.fileSize / 1024)} KB
-                    </td>
-                    <td className="px-3 py-1.5 text-text-muted">
-                      {file.mimeType || "파일"}
                     </td>
                     <td className="px-3 py-1.5 text-right">
                       <button
                         type="button"
                         className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-slate-100 text-slate-500 mr-1"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setPreview(file);
-                        }}
+                        onClick={(e) => { e.stopPropagation(); setPreview(file); }}
                       >
                         <Eye size={13} />
                       </button>
-                      <button
-                        type="button"
-                        className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-danger-50 text-danger-500"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(file);
-                        }}
-                      >
-                        <Trash2 size={13} />
-                      </button>
+                      {canEdit && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-danger-50 text-danger-500"
+                          onClick={(e) => { e.stopPropagation(); handleDeleteFile(file); }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
-                {files.length === 0 && (
+                {(currentFolderId ? folderFiles : rootFiles).length === 0 && (
                   <tr>
-                    <td
-                      colSpan={5}
-                      className="px-3 py-6 text-center text-xs text-text-muted"
-                    >
-                      등록된 문서가 없습니다.
+                    <td colSpan={4} className="px-3 py-6 text-center text-xs text-text-muted">
+                      {currentFolderId ? "이 폴더에 파일이 없습니다." : "등록된 문서가 없습니다. 드래그하거나 파일 선택으로 추가하세요."}
                     </td>
                   </tr>
                 )}
@@ -831,27 +1082,27 @@ function CaseDocumentsPanel({ caseItem }: { caseItem: CaseItem }) {
             </table>
           </div>
         </div>
-        <div className="w-64 hidden md:flex flex-col">
+        <div className="w-56 hidden md:flex flex-col shrink-0">
           <div className="px-3 py-2 border-b border-slate-100 text-xs font-semibold text-slate-700">
             미리보기
           </div>
-          <div className="flex-1 flex items-center justify-center bg-slate-50 text-[11px] text-text-muted px-2">
+          <div className="flex-1 flex items-center justify-center bg-slate-50 text-[11px] text-text-muted px-2 min-h-0">
             {preview ? (
-              preview.mimeType.includes("pdf") ? (
+              preview.mimeType?.includes("pdf") ? (
                 <iframe
                   src={preview.url}
                   title={preview.fileName}
-                  className="w-full h-full rounded-md border border-slate-200 bg-white"
+                  className="w-full h-full rounded-md border border-slate-200 bg-white min-h-[120px]"
                 />
               ) : (
                 <div className="text-center">
-                  <p className="font-medium mb-1">{preview.fileName}</p>
-                  <p>이 유형의 파일은 브라우저 미리보기가 제한될 수 있습니다.</p>
+                  <p className="font-medium mb-1 truncate">{preview.fileName}</p>
+                  <p>이 유형은 미리보기가 제한될 수 있습니다.</p>
                 </div>
               )
             ) : (
               <div className="text-center px-2">
-                문서를 더블클릭하면 이 영역에 미리보기가 표시됩니다.
+                문서를 더블클릭하면 미리보기가 표시됩니다.
               </div>
             )}
           </div>

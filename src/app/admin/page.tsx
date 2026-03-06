@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { LayoutDashboard, Menu, Settings, ExternalLink, Database } from "lucide-react";
+import { LayoutDashboard, Menu, Settings, ExternalLink, Database, Server, FolderOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const cards = [
@@ -18,6 +18,20 @@ const cards = [
     href: "/admin/settings",
     icon: Settings,
     cta: "설정하기",
+  },
+  {
+    title: "G6(그누보드6) 관리",
+    desc: "G6 관리자 콘솔(회원·게시판·환경설정·테마·메뉴 등) 기능을 열어 사용합니다. 연동 URL 설정 시 바로가기 제공.",
+    href: "/admin/g6",
+    icon: Server,
+    cta: "G6 관리",
+  },
+  {
+    title: "사건관리",
+    desc: "대량 엑셀 등록, 전체 사건 목록 검색·필터, 진행사건 종결·일괄 삭제 등 사건을 편집·관리합니다.",
+    href: "/admin/cases",
+    icon: FolderOpen,
+    cta: "사건관리하기",
   },
 ];
 

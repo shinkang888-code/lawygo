@@ -67,3 +67,59 @@ export async function POST(request: NextRequest) {
   }
   return NextResponse.json(data);
 }
+
+/** 전체 메뉴 일괄 저장: 기존 삭제 후 현재 목록 전부 INSERT */
+export async function PUT(request: NextRequest) {
+  if (!supabase) {
+    return NextResponse.json({ error: "DB가 연결되지 않았습니다." }, { status: 503 });
+  }
+  let body: { data: { type: MenuType; item_order: number; item_id: string; label: string; href: string; icon: string; badge?: number | null; roles?: string[] | null; lawtop_module?: string | null }[] };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
+  }
+  const items = Array.isArray(body.data) ? body.data : [];
+  for (const row of items) {
+    if (!row.type || !row.item_id || !row.label || !row.href || !row.icon) {
+      return NextResponse.json(
+        { error: "각 항목에 type, item_id, label, href, icon 이 필요합니다." },
+        { status: 400 }
+      );
+    }
+  }
+
+  const { data: existing } = await supabase.from("site_menus").select("id");
+  if (existing && existing.length > 0) {
+    const { error: delError } = await supabase.from("site_menus").delete().in("id", existing.map((r) => r.id));
+    if (delError) {
+      return NextResponse.json({ error: delError.message }, { status: 400 });
+    }
+  }
+
+  if (items.length === 0) {
+    return NextResponse.json({ data: [], source: "db" });
+  }
+
+  const inserts = items.map((row) => ({
+    type: row.type,
+    item_id: row.item_id,
+    label: row.label,
+    href: row.href,
+    icon: row.icon,
+    item_order: typeof row.item_order === "number" ? row.item_order : 999,
+    badge: row.badge ?? null,
+    roles: row.roles ?? [],
+    lawtop_module: row.lawtop_module ?? null,
+  }));
+
+  const { data: inserted, error: insertError } = await supabase
+    .from("site_menus")
+    .insert(inserts)
+    .select();
+
+  if (insertError) {
+    return NextResponse.json({ error: insertError.message }, { status: 400 });
+  }
+  return NextResponse.json({ data: inserted ?? [], source: "db" });
+}

@@ -78,7 +78,18 @@ src/
 - **DB 스키마**: `supabase/migrations/20260306000000_lawgo_schema.sql`  
   - 테이블: `cases`, `deadlines`, `staff`, `clients`, `approvals`, `approval_steps`, `finance_entries`, `bank_transactions`, `timeline`, `notifications`, `consultations`
 - **메뉴 설정**: `src/lib/menuConfig.ts` (LNB / 모바일 메뉴, LawTop 모듈 대응)
-- **Supabase 사용 시**: `npm install @supabase/supabase-js` 후 `.env.local`에 URL/Key 설정, `getSupabase()` 사용
+- **Supabase 사용 시**: `npm install @supabase/supabase-js` 후 아래 환경 변수 설정
+
+### DB 연동 (Supabase)
+
+시스템 설정·권한 관리 등에서 "DB가 연결되지 않았습니다"가 나오면 환경 변수를 설정하세요.
+
+1. 프로젝트 루트에 `.env.local` 생성 후 다음 중 하나 이상 설정:
+   - **필수**: `NEXT_PUBLIC_SUPABASE_URL` — Supabase 대시보드 → Settings → API → Project URL
+   - **권장(관리자 기능)**: `SUPABASE_SERVICE_ROLE_KEY` — 같은 화면에서 service_role 키 (비공개 유지)
+   - **선택(클라이언트 로그인 등)**: `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon public 키
+2. 예시는 `.env.example` 참고. (`cp .env.example .env.local` 후 값만 채우면 됨)
+3. `app_settings` 테이블이 없으면 Supabase에 마이그레이션 적용: `supabase/migrations/20260307100000_app_settings.sql`
 
 ## 🔧 프론트엔드 관리자
 
@@ -125,5 +136,8 @@ npx vercel --prod
 ```
 
 Vercel 대시보드에서 환경 변수 설정:
+- `NEXT_PUBLIC_SUPABASE_URL` — Supabase 프로젝트 URL (필수)
+- `SUPABASE_SERVICE_ROLE_KEY` — 서비스 롤 키 (시스템 설정·권한 관리 등)
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — 공개 키 (클라이언트 로그인 등)
 - `NEXT_PUBLIC_GNUBOARD_API_URL`
 - `NEXT_PUBLIC_GNUBOARD_API_KEY`

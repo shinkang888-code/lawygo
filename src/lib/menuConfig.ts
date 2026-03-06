@@ -22,6 +22,7 @@ export const LNB_MENU: MenuItem[] = [
   { id: "board", label: "전문 게시판", href: "/board", icon: "LayoutList", lawtopModule: "게시판" },
   { id: "calendar", label: "기일 달력", href: "/calendar", icon: "Calendar", lawtopModule: "기일/일정" },
   { id: "consultation", label: "상담관리", href: "/consultation", icon: "MessageSquare", lawtopModule: "상담/회의실" },
+  { id: "messenger", label: "메신저", href: "/messenger", icon: "Send", lawtopModule: "메신저" },
   { id: "approval", label: "전자결재", href: "/approval", icon: "FileText", badge: 0, lawtopModule: "LawTopProcess" },
   { id: "finance", label: "회계/수납", href: "/finance", icon: "CreditCard", lawtopModule: "LawTopCashReceipt" },
   { id: "stats", label: "통계/분석", href: "/stats", icon: "BarChart3", lawtopModule: "Reports" },
@@ -43,6 +44,7 @@ export const MOBILE_MAIN_MENU: MenuItem[] = [
 export const MOBILE_MORE_MENU: MenuItem[] = [
   { id: "calendar", label: "기일 달력", href: "/calendar", icon: "CalendarDays" },
   { id: "consultation", label: "상담관리", href: "/consultation", icon: "MessageSquare" },
+  { id: "messenger", label: "메신저", href: "/messenger", icon: "Send" },
   { id: "stats", label: "통계/분석", href: "/stats", icon: "BarChart3" },
   { id: "staff", label: "직원 관리", href: "/staff", icon: "Users" },
   { id: "notifications", label: "알림", href: "/notifications", icon: "Bell" },

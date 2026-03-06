@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Menu, Settings, Shield } from "lucide-react";
+import { LayoutDashboard, Menu, Settings, Shield, Server } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const adminNav = [
   { label: "관리 대시보드", href: "/admin", icon: LayoutDashboard },
   { label: "메뉴 관리", href: "/admin/menus", icon: Menu },
   { label: "시스템 설정", href: "/admin/settings", icon: Settings },
+  { label: "G6 관리", href: "/admin/g6", icon: Server },
 ];
 
 export default function AdminLayout({

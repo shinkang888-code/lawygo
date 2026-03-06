@@ -5,7 +5,6 @@ import { motion } from "framer-motion";
 import Link from "next/link";
 import { PriorityCard } from "@/components/dashboard/PriorityCard";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { RevenueChart } from "@/components/dashboard/RevenueChart";
 import { mockCases, mockDashboardStats, mockApprovals } from "@/lib/mockData";
 import { formatDate, getDDay } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -81,11 +80,6 @@ export default function DashboardPage() {
           <StatCard title="결재 대기" value={mockDashboardStats.pendingApprovals} unit="건" icon={<FileCheck size={16} />} color="yellow" />
           <StatCard title="미수금" value={mockDashboardStats.pendingPayments} unit="건" icon={<CreditCard size={16} />} color="red" />
           <StatCard title="이번 달 수임료" value={mockDashboardStats.totalMonthlyIncome} icon={<TrendingUp size={16} />} color="green" isAmount change={8} />
-        </motion.div>
-
-        {/* Revenue chart */}
-        <motion.div variants={itemVariants}>
-          <RevenueChart />
         </motion.div>
 
         {/* Main grid */}

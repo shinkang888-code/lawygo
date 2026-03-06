@@ -81,11 +81,14 @@ export function isBoardApiConfigured(): boolean {
   return Boolean(url && url !== "https://your-gnuboard.com/api");
 }
 
-/** 게시판 목록 조회 (에러 시 빈 배열 반환) */
+/** 게시판 목록 조회 (에러 시 빈 배열 반환, G6 미연동 시 빈 목록으로 성공 처리) */
 export async function bridgeGetPostList(
   boardId: string,
   params: { page?: number; per_page?: number; search_keyword?: string; search_field?: string; category?: string } = {}
 ): Promise<BridgeResult<BoardPost[]>> {
+  if (!isBoardApiConfigured()) {
+    return { success: true, data: [], source: "fallback" };
+  }
   try {
     const res = await getPostList(boardId, params);
     const list = Array.isArray(res?.data) ? res.data : [];

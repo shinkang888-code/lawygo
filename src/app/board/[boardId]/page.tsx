@@ -150,6 +150,17 @@ export default function BoardPostsPage({ params }: { params: Promise<{ boardId: 
                       <td colSpan={5} className="px-5 py-12 text-center text-sm text-text-muted">
                         <FileText size={32} className="mx-auto mb-2 text-slate-300" />
                         게시글이 없습니다.
+                        {!g6Connected && (
+                          <p className="text-xs mt-1.5 text-slate-400">
+                            G6를 연동하면 이 게시판에 글이 표시됩니다.{" "}
+                            <Link
+                              href="/admin/settings/integration"
+                              className="text-primary-600 hover:underline"
+                            >
+                              그누보드 연동 방법 보기
+                            </Link>
+                          </p>
+                        )}
                       </td>
                     </tr>
                   ) : (

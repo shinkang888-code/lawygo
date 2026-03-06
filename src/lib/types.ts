@@ -205,3 +205,29 @@ export interface PaginationConfig {
   pageSize: number;
   total: number;
 }
+
+/** 기일(달력용) - 사건 nextDate와 별도로 등록·관리하는 기일 */
+export interface DeadlineItem {
+  id: string;
+  date: string;                 // YYYY-MM-DD
+  caseId?: string;
+  caseNumber: string;            // 표시용 사건번호
+  type: string;                  // 변론기일, 선고기일, 서면제출 등
+  court?: string;
+  assignedStaff?: string;
+  memo?: string;
+  status: "active" | "deleted";  // 소프트 삭제
+  createdAt: string;
+  updatedAt: string;
+  deletedAt?: string;
+}
+
+/** 기일 등록 폼 필드 정의 (폼 양식 수정용) */
+export interface DeadlineFormFieldConfig {
+  key: string;
+  label: string;
+  type: "text" | "date" | "select" | "textarea";
+  required?: boolean;
+  placeholder?: string;
+  options?: { value: string; label: string }[];
+}

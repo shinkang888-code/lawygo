@@ -7,8 +7,9 @@ import Link from "next/link";
 import {
   ArrowLeft, MessageSquare, FileText, DollarSign, GitBranch,
   Paperclip, Send, Scale, Sparkles, X,
-  FileIcon, Download, Eye, AlertCircle, MoreVertical, Trash2, Edit
+  FileIcon, Download, Eye, AlertCircle, MoreVertical, Trash2, Edit, ExternalLink
 } from "lucide-react";
+import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
 import { mockCases, mockTimeline } from "@/lib/mockData";
 import { cn, formatDate, getDDay, formatAmount, formatFileSize } from "@/lib/utils";
 import { StatusBadge, DDayBadge, ElectronicBadge, ImmutableBadge } from "@/components/ui/badge";
@@ -102,6 +103,15 @@ export default function CaseDetailPage() {
             <InfoItem icon="👤" label="의뢰인" value={`${caseItem.clientName} (${caseItem.clientPosition})`} />
             <InfoItem icon="⚔️" label="상대방" value={caseItem.opponentName} />
             <InfoItem icon="🏛️" label="법원" value={caseItem.court} />
+            <button
+              type="button"
+              onClick={() => copyAndOpenScourtSearch(caseItem.caseNumber, caseItem.clientName)}
+              className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 hover:border-primary-200 hover:text-primary-600 transition-colors"
+              title="사건번호·당사자명 복사 후 대법원 나의 사건검색 열기"
+            >
+              <ExternalLink size={12} />
+              법원 나의 사건검색에서 조회
+            </button>
 
             <SectionTitle>수임 정보</SectionTitle>
             <InfoItem icon="📅" label="수임일" value={formatDate(caseItem.receivedDate)} />
