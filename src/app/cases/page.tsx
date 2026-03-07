@@ -780,11 +780,17 @@ function CaseDocumentsPanel({
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
+  const [editingFileId, setEditingFileId] = useState<string | null>(null);
+  const [editingFileName, setEditingFileName] = useState("");
+
+  const FILE_DRAG_TYPE = "application/x-lawygo-file-id";
 
   useEffect(() => {
     setPreview(null);
     setCurrentFolderId(null);
     setEditingFolderId(null);
+    setEditingFileId(null);
+    setEditingFileName("");
   }, [caseItem?.id]);
 
   if (!caseItem) {
@@ -805,6 +811,11 @@ function CaseDocumentsPanel({
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
+    const fileId = e.dataTransfer.getData(FILE_DRAG_TYPE);
+    if (fileId && onFilesChange) {
+      moveFileToFolder(fileId, currentFolderId);
+      return;
+    }
     if (!onFilesChange) return;
     const dropped = Array.from(e.dataTransfer.files);
     if (dropped.length === 0) return;
@@ -846,6 +857,40 @@ function CaseDocumentsPanel({
     if (file.local && file.url) URL.revokeObjectURL(file.url);
     if (preview?.id === file.id) setPreview(null);
     toast.success("파일이 삭제되었습니다.");
+  };
+
+  const handleRenameFile = (file: CaseFile) => {
+    setEditingFileId(file.id);
+    setEditingFileName(file.fileName);
+  };
+
+  const handleSaveRenameFile = () => {
+    if (!onFilesChange || !editingFileId || !editingFileName.trim()) return;
+    onFilesChange(
+      files.map((f) => (f.id === editingFileId ? { ...f, fileName: editingFileName.trim() } : f))
+    );
+    setEditingFileId(null);
+    setEditingFileName("");
+    toast.success("파일명이 변경되었습니다.");
+  };
+
+  const moveFileToFolder = (fileId: string, targetFolderId: string | null) => {
+    if (!onFilesChange) return;
+    onFilesChange(
+      files.map((f) => (f.id === fileId ? { ...f, folderId: targetFolderId ?? undefined } : f))
+    );
+    toast.success("파일을 이동했습니다.");
+  };
+
+  const openViewerInNewWindow = (file: CaseFile) => {
+    try {
+      sessionStorage.setItem("lawygo_viewer_url", file.url);
+      sessionStorage.setItem("lawygo_viewer_name", file.fileName);
+      sessionStorage.setItem("lawygo_viewer_mime", file.mimeType ?? "");
+      window.open("/viewer", "_blank", "noopener,noreferrer,width=900,height=700");
+    } catch {
+      setPreview(file);
+    }
   };
 
   const handleCreateFolder = () => {
@@ -941,6 +986,12 @@ function CaseDocumentsPanel({
             <button
               type="button"
               onClick={() => setCurrentFolderId(null)}
+              onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+              onDrop={(e) => {
+                e.preventDefault();
+                const fileId = e.dataTransfer.getData(FILE_DRAG_TYPE);
+                if (fileId) moveFileToFolder(fileId, null);
+              }}
               className={cn(
                 "w-full text-left px-2 py-1.5 rounded-r",
                 !currentFolderId ? "bg-primary-50 text-primary-700 font-medium" : "hover:bg-slate-50 text-slate-700"
@@ -951,6 +1002,12 @@ function CaseDocumentsPanel({
             {folders.map((folder) => (
               <div
                 key={folder.id}
+                onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = "move"; }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const fileId = e.dataTransfer.getData(FILE_DRAG_TYPE);
+                  if (fileId) moveFileToFolder(fileId, folder.id);
+                }}
                 className={cn(
                   "group flex items-center gap-1 w-full text-left px-2 py-1.5 rounded-r",
                   currentFolderId === folder.id ? "bg-primary-50 text-primary-700 font-medium" : "hover:bg-slate-50 text-slate-700"
@@ -1041,13 +1098,36 @@ function CaseDocumentsPanel({
                 {(currentFolderId ? folderFiles : rootFiles).map((file) => (
                   <tr
                     key={file.id}
+                    draggable
+                    onDragStart={(e) => {
+                      e.dataTransfer.setData(FILE_DRAG_TYPE, file.id);
+                      e.dataTransfer.effectAllowed = "move";
+                    }}
                     className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
-                    onDoubleClick={() => setPreview(file)}
+                    onDoubleClick={() => openViewerInNewWindow(file)}
                   >
                     <td className="px-3 py-1.5 align-top">
                       <FileIcon size={14} className="text-slate-400" />
                     </td>
-                    <td className="px-3 py-1.5 text-slate-800 truncate">{file.fileName}</td>
+                    <td className="px-3 py-1.5 text-slate-800">
+                      {editingFileId === file.id ? (
+                        <input
+                          type="text"
+                          value={editingFileName}
+                          onChange={(e) => setEditingFileName(e.target.value)}
+                          onBlur={handleSaveRenameFile}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") handleSaveRenameFile();
+                            if (e.key === "Escape") { setEditingFileId(null); setEditingFileName(""); }
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full px-2 py-1 text-xs border border-slate-200 rounded"
+                          autoFocus
+                        />
+                      ) : (
+                        <span className="truncate block">{file.fileName}</span>
+                      )}
+                    </td>
                     <td className="px-3 py-1.5 text-text-muted tabular-nums">
                       {Math.round(file.fileSize / 1024)} KB
                     </td>
@@ -1056,14 +1136,26 @@ function CaseDocumentsPanel({
                         type="button"
                         className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-slate-100 text-slate-500 mr-1"
                         onClick={(e) => { e.stopPropagation(); setPreview(file); }}
+                        title="미리보기"
                       >
                         <Eye size={13} />
                       </button>
+                      {canEdit && editingFileId !== file.id && (
+                        <button
+                          type="button"
+                          className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-slate-100 text-slate-500 mr-1"
+                          onClick={(e) => { e.stopPropagation(); handleRenameFile(file); }}
+                          title="이름 변경"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      )}
                       {canEdit && (
                         <button
                           type="button"
                           className="inline-flex items-center justify-center w-7 h-7 rounded hover:bg-danger-50 text-danger-500"
                           onClick={(e) => { e.stopPropagation(); handleDeleteFile(file); }}
+                          title="삭제"
                         >
                           <Trash2 size={13} />
                         </button>
@@ -1102,7 +1194,7 @@ function CaseDocumentsPanel({
               )
             ) : (
               <div className="text-center px-2">
-                문서를 더블클릭하면 미리보기가 표시됩니다.
+                문서를 더블클릭하면 새 창에서 미리보기가 열립니다.
               </div>
             )}
           </div>

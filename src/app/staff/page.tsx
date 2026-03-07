@@ -1,24 +1,63 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { mockStaff } from "@/lib/mockData";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Plus, Mail, Phone } from "lucide-react";
+import { Plus, Mail, Phone, Building2, Smartphone } from "lucide-react";
 import { motion } from "framer-motion";
+import type { StaffMember } from "@/lib/types";
+import { toast } from "@/components/ui/toast";
 
 export default function StaffPage() {
+  const [staffList, setStaffList] = useState<StaffMember[]>(mockStaff);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === "STAFF_ADD" && Array.isArray(e.data?.payload)) {
+        const added = e.data.payload as StaffMember[];
+        setStaffList((prev) => [...added, ...prev]);
+        toast.success(`${added.length}명이 추가되었습니다.`);
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  const openAddWindow = () => {
+    const w = 520;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(
+      "/staff/add",
+      "staff-add",
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+  };
+
+  const displayPhone = (s: StaffMember) => {
+    if (s.companyPhone || s.personalPhone) {
+      return [s.companyPhone, s.personalPhone].filter(Boolean).join(" / ");
+    }
+    return s.phone;
+  };
+
   return (
     <div className="p-6 max-w-screen-xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-xl font-bold text-slate-900">직원 관리</h1>
-          <p className="text-sm text-text-muted mt-0.5">전체 {mockStaff.length}명</p>
+          <p className="text-sm text-text-muted mt-0.5">전체 {staffList.length}명</p>
         </div>
-        <Button size="sm" leftIcon={<Plus size={14} />}>직원 추가</Button>
+        <Button size="sm" leftIcon={<Plus size={14} />} onClick={openAddWindow}>
+          직원 추가
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {mockStaff.map((staff, i) => (
+        {staffList.map((staff, i) => (
           <motion.div
             key={staff.id}
             initial={{ opacity: 0, y: 8 }}
@@ -38,9 +77,24 @@ export default function StaffPage() {
                   <div className="flex items-center gap-1.5 text-xs text-text-muted">
                     <Mail size={11} /> {staff.email}
                   </div>
-                  <div className="flex items-center gap-1.5 text-xs text-text-muted">
-                    <Phone size={11} /> {staff.phone}
-                  </div>
+                  {(staff.companyPhone || staff.personalPhone) ? (
+                    <>
+                      {staff.companyPhone && (
+                        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                          <Building2 size={11} /> {staff.companyPhone}
+                        </div>
+                      )}
+                      {staff.personalPhone && (
+                        <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                          <Smartphone size={11} /> {staff.personalPhone}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-1.5 text-xs text-text-muted">
+                      <Phone size={11} /> {staff.phone}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

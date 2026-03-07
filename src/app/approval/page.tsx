@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   FileCheck, Plus, Check, X, Clock, ChevronRight, GripVertical,
@@ -28,7 +28,33 @@ export default function ApprovalPage() {
   const [approvalLine, setApprovalLine] = useState<ApprovalStep[]>(
     approvals[0]?.approvalLine ?? []
   );
-  const [showNewModal, setShowNewModal] = useState(false);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin) return;
+      if (e.data?.type === "APPROVAL_DRAFT_SUBMIT" && e.data?.payload) {
+        const newDoc = e.data.payload as ApprovalDoc;
+        setApprovals((prev) => [newDoc, ...prev]);
+        setSelected(newDoc);
+        setApprovalLine(newDoc.approvalLine);
+        toast.success("새 결재 문서가 추가되었습니다.");
+      }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
+  const openDraftWindow = () => {
+    const w = 520;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(
+      "/approval/draft",
+      "approval-draft",
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes`
+    );
+  };
 
   const handleDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -72,14 +98,14 @@ export default function ApprovalPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Left: Approval List */}
-      <aside className="w-72 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+      {/* Left: 기안창 (전자결재함) - 절반 */}
+      <aside className="w-1/2 min-w-0 flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
         <div className="px-4 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-slate-900">전자결재함</h2>
             <p className="text-xs text-text-muted mt-0.5">대기 {approvals.length}건</p>
           </div>
-          <Button size="sm" leftIcon={<Plus size={13} />} onClick={() => setShowNewModal(true)}>
+          <Button size="sm" leftIcon={<Plus size={13} />} onClick={openDraftWindow}>
             기안
           </Button>
         </div>
@@ -135,9 +161,9 @@ export default function ApprovalPage() {
         </div>
       </aside>
 
-      {/* Main content */}
+      {/* Right: 결재 문서 상세 - 절반 */}
       {selected ? (
-        <main className="flex-1 overflow-y-auto bg-background">
+        <main className="w-1/2 min-w-0 overflow-y-auto bg-background flex flex-col">
           <div className="max-w-3xl mx-auto p-6 space-y-6">
             {/* Header */}
             <motion.div

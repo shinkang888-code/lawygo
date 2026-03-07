@@ -14,9 +14,10 @@ import {
   Pencil,
   Trash2,
   X,
+  User,
 } from "lucide-react";
 import { mockConsultations, mockConsultationRooms, mockCases, mockStaff } from "@/lib/mockData";
-import type { ConsultationItem, ConsultationRoom, ConsultationStatus } from "@/lib/types";
+import type { ConsultationItem, ConsultationRoom, ConsultationStatus, ConsultationConsultant } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
@@ -89,14 +90,19 @@ export default function ConsultationPage() {
   };
 
   const handleSaveConsultation = (payload: Partial<ConsultationItem>) => {
+    const consultants = payload.consultants?.length ? payload.consultants : (payload.consultantId ? [{ id: payload.consultantId, name: payload.consultantName ?? "" }] : undefined);
+    const clientNames = payload.clientNames?.length ? payload.clientNames : (payload.clientName ? [payload.clientName] : undefined);
+    const normalized = { ...payload, consultants, clientNames, consultantId: consultants?.[0]?.id ?? payload.consultantId, consultantName: consultants?.[0]?.name ?? payload.consultantName, clientName: clientNames?.[0] ?? payload.clientName };
     if (editing) {
       setConsultations((prev) =>
-        prev.map((c) => (c.id === editing.id ? { ...c, ...payload, updatedAt: new Date().toISOString() } : c))
+        prev.map((c) => (c.id === editing.id ? { ...c, ...normalized, updatedAt: new Date().toISOString() } : c))
       );
       toast.success("상담이 수정되었습니다.");
     } else {
       const newId = "con-" + Date.now();
       const room = rooms.find((r) => r.id === payload.roomId);
+      const consultants = payload.consultants?.length ? payload.consultants : (payload.consultantId ? [{ id: payload.consultantId, name: payload.consultantName ?? "" }] : []);
+      const clientNames = payload.clientNames?.length ? payload.clientNames : (payload.clientName ? [payload.clientName] : []);
       setConsultations((prev) => [
         ...prev,
         {
@@ -106,9 +112,11 @@ export default function ConsultationPage() {
           endTime: payload.endTime!,
           roomId: payload.roomId!,
           roomName: room?.name ?? "",
-          consultantId: payload.consultantId!,
-          consultantName: payload.consultantName!,
-          clientName: payload.clientName ?? "",
+          consultantId: consultants[0]?.id ?? payload.consultantId!,
+          consultantName: consultants[0]?.name ?? payload.consultantName ?? "",
+          consultants: consultants.length ? consultants : undefined,
+          clientName: clientNames[0] ?? payload.clientName ?? "",
+          clientNames: clientNames.length ? clientNames : undefined,
           purpose: payload.purpose ?? "",
           importance: payload.importance ?? "medium",
           status: (payload.status as ConsultationStatus) ?? "scheduled",
@@ -284,8 +292,11 @@ export default function ConsultationPage() {
                             }}
                           >
                             {cell && (
-                              <div className="text-2xs truncate px-0.5 text-warning-800" title={cell.clientName + " " + cell.purpose}>
-                                {cell.clientName}
+                              <div
+                                className="text-2xs truncate px-0.5 text-warning-800"
+                                title={`방문: ${(cell.clientNames?.length ? cell.clientNames : (cell.clientName ? [cell.clientName] : [])).join(", ")} · 담당: ${(cell.consultants?.length ? cell.consultants.map((x) => x.name) : [cell.consultantName]).join(", ")}${cell.purpose ? ` · ${cell.purpose}` : ""}`}
+                              >
+                                {(cell.clientNames?.length ? cell.clientNames : (cell.clientName ? [cell.clientName] : [])).join(", ")}
                               </div>
                             )}
                           </td>
@@ -329,10 +340,14 @@ export default function ConsultationPage() {
                         <tr key={c.id} className="border-t border-slate-50 text-sm hover:bg-slate-50/50">
                           <td className="px-5 py-3 tabular-nums">{c.consultationDate} {c.startTime}-{c.endTime}</td>
                           <td className="px-5 py-3">{c.roomName}</td>
-                          <td className="px-5 py-3">{c.consultantName}</td>
+                          <td className="px-5 py-3 text-slate-800">
+                            {(c.consultants?.length ? c.consultants.map((x) => x.name) : [c.consultantName]).filter(Boolean).join(", ")}
+                          </td>
                           <td className="px-5 py-3">
-                            <span className="font-medium text-slate-800">{c.clientName}</span>
-                            <span className="text-text-muted ml-1">{c.purpose}</span>
+                            <span className="font-medium text-slate-800">
+                              {(c.clientNames?.length ? c.clientNames : (c.clientName ? [c.clientName] : [])).filter(Boolean).join(", ")}
+                            </span>
+                            {c.purpose && <span className="text-text-muted ml-1">{c.purpose}</span>}
                           </td>
                           <td className="px-5 py-3">
                             <span className={cn(
@@ -459,15 +474,26 @@ function ConsultationForm({
   onDelete?: () => void;
   onClose: () => void;
 }) {
+  const initialConsultants: ConsultationConsultant[] = consultation?.consultants?.length
+    ? consultation.consultants
+    : (consultation?.consultantId || initial?.consultantId)
+      ? [{ id: consultation?.consultantId ?? initial?.consultantId!, name: consultation?.consultantName ?? initial?.consultantName ?? "" }]
+      : staff[0] ? [{ id: staff[0].id, name: staff[0].name }] : [];
+  const initialClientNames: string[] = consultation?.clientNames?.length
+    ? consultation.clientNames
+    : (consultation?.clientName || initial?.clientName) ? [consultation?.clientName ?? initial?.clientName ?? ""] : [];
+
   const [form, setForm] = useState<Partial<ConsultationItem>>(() => ({
     consultationDate: consultation?.consultationDate ?? initial?.consultationDate ?? defaultDate,
     startTime: consultation?.startTime ?? initial?.startTime ?? "10:00",
     endTime: consultation?.endTime ?? initial?.endTime ?? "10:30",
     roomId: consultation?.roomId ?? initial?.roomId ?? rooms[0]?.id,
     roomName: consultation?.roomName ?? initial?.roomName ?? rooms[0]?.name,
-    consultantId: consultation?.consultantId ?? initial?.consultantId ?? staff[0]?.id,
-    consultantName: consultation?.consultantName ?? initial?.consultantName ?? staff[0]?.name,
-    clientName: consultation?.clientName ?? initial?.clientName ?? "",
+    consultantId: initialConsultants[0]?.id ?? staff[0]?.id,
+    consultantName: initialConsultants[0]?.name ?? staff[0]?.name,
+    consultants: initialConsultants,
+    clientName: initialClientNames[0] ?? "",
+    clientNames: initialClientNames,
     purpose: consultation?.purpose ?? initial?.purpose ?? "",
     importance: consultation?.importance ?? initial?.importance ?? "medium",
     status: consultation?.status ?? initial?.status ?? "scheduled",
@@ -476,15 +502,55 @@ function ConsultationForm({
     notes: consultation?.notes ?? initial?.notes ?? "",
   }));
 
+  const [consultantSelect, setConsultantSelect] = useState("");
+  const [visitorInput, setVisitorInput] = useState("");
+
+  const consultants = form.consultants ?? (form.consultantId ? [{ id: form.consultantId, name: form.consultantName ?? "" }] : []);
+  const clientNames = form.clientNames ?? (form.clientName ? [form.clientName] : []);
+
+  const addConsultant = (staffId: string) => {
+    const s = staff.find((x) => x.id === staffId);
+    if (!s || consultants.some((c) => c.id === s.id)) return;
+    setForm((p) => ({ ...p, consultants: [...consultants, { id: s.id, name: s.name }], consultantId: consultants[0]?.id ?? s.id, consultantName: consultants[0]?.name ?? s.name }));
+    setConsultantSelect("");
+  };
+  const removeConsultant = (id: string) => {
+    const next = consultants.filter((c) => c.id !== id);
+    setForm((p) => ({ ...p, consultants: next, consultantId: next[0]?.id, consultantName: next[0]?.name }));
+  };
+  const addVisitor = () => {
+    const name = visitorInput.trim();
+    if (!name || clientNames.includes(name)) return;
+    setForm((p) => ({ ...p, clientNames: [...clientNames, name], clientName: clientNames[0] ?? name }));
+    setVisitorInput("");
+  };
+  const removeVisitor = (name: string) => {
+    const next = clientNames.filter((n) => n !== name);
+    setForm((p) => ({ ...p, clientNames: next, clientName: next[0] ?? "" }));
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const finalConsultants = form.consultants?.length ? form.consultants : consultants;
+    const finalClientNames = form.clientNames?.length ? form.clientNames : clientNames;
+    if (finalConsultants.length === 0) {
+      toast.error("상담 담당자를 1명 이상 선택하세요.");
+      return;
+    }
+    if (finalClientNames.length === 0 && !form.purpose?.trim()) {
+      toast.error("방문자(내담자) 또는 용건을 입력하세요.");
+      return;
+    }
     const room = rooms.find((r) => r.id === form.roomId);
-    const consultant = staff.find((s) => s.id === form.consultantId);
     const c = cases.find((x) => x.id === form.caseId);
     onSave({
       ...form,
       roomName: room?.name,
-      consultantName: consultant?.name,
+      consultantId: finalConsultants[0]?.id,
+      consultantName: finalConsultants[0]?.name,
+      consultants: finalConsultants,
+      clientName: finalClientNames[0],
+      clientNames: finalClientNames,
       caseNumber: c?.caseNumber,
     });
   };
@@ -558,30 +624,58 @@ function ConsultationForm({
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">상담 담당 *</label>
-            <select
-              value={form.consultantId}
-              onChange={(e) => {
-                const s = staff.find((x) => x.id === e.target.value);
-                setForm((p) => ({ ...p, consultantId: e.target.value, consultantName: s?.name }));
-              }}
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
-              required
-            >
-              {staff.map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+            <label className="block text-xs font-medium text-slate-600 mb-1">상담 담당 * (여러 명 선택, 문자 발송 시 복수 입력)</label>
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-slate-200 bg-slate-50/50 min-h-[42px]">
+              {consultants.map((c) => (
+                <span
+                  key={c.id}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-100 text-primary-800 text-xs font-medium"
+                >
+                  {c.name}
+                  <button type="button" onClick={() => removeConsultant(c.id)} className="p-0.5 rounded hover:bg-primary-200/50" aria-label="제거">
+                    <X size={12} />
+                  </button>
+                </span>
               ))}
-            </select>
+              <select
+                value={consultantSelect}
+                onChange={(e) => { const v = e.target.value; if (v) addConsultant(v); }}
+                onBlur={() => setConsultantSelect("")}
+                className="flex-1 min-w-[120px] px-2 py-1 text-sm border-0 bg-transparent focus:outline-none focus:ring-0 text-slate-600"
+              >
+                <option value="">+ 담당자 추가</option>
+                {staff.filter((s) => !consultants.some((c) => c.id === s.id)).map((s) => (
+                  <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+                ))}
+              </select>
+            </div>
+            {consultants.length === 0 && <p className="text-2xs text-text-muted mt-0.5">드롭다운에서 선택하면 칩으로 추가됩니다.</p>}
           </div>
           <div>
-            <label className="block text-xs font-medium text-slate-600 mb-1">내담자/용건 *</label>
-            <input
-              type="text"
-              value={form.clientName}
-              onChange={(e) => setForm((p) => ({ ...p, clientName: e.target.value }))}
-              placeholder="이름"
-              className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm mb-1"
-            />
+            <label className="block text-xs font-medium text-slate-600 mb-1">방문자(내담자)/용건 *</label>
+            <div className="flex flex-wrap gap-1.5 p-2 rounded-lg border border-slate-200 bg-slate-50/50 min-h-[42px] mb-1">
+              {clientNames.map((name) => (
+                <span
+                  key={name}
+                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-slate-200 text-slate-800 text-xs font-medium"
+                >
+                  <User size={11} />
+                  {name}
+                  <button type="button" onClick={() => removeVisitor(name)} className="p-0.5 rounded hover:bg-slate-300/50" aria-label="제거">
+                    <X size={12} />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                value={visitorInput}
+                onChange={(e) => setVisitorInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addVisitor(); } }}
+                placeholder="이름 입력 후 Enter"
+                className="flex-1 min-w-[100px] px-2 py-1 text-sm border-0 bg-transparent focus:outline-none focus:ring-0"
+              />
+            </div>
+            <button type="button" onClick={addVisitor} className="text-xs text-primary-600 hover:underline mb-1">+ 방문자 추가</button>
             <input
               type="text"
               value={form.purpose}

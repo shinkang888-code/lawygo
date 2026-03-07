@@ -175,19 +175,20 @@ export default function MessengerPage() {
                 </Button>
               )}
             </div>
-            <div className="flex-1 min-h-[120px]">
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <div className="flex-1 flex flex-col min-h-0">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5 shrink-0">
                 발송 내용
               </label>
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                placeholder="발송할 메시지를 입력하세요. 오른쪽에서 사전 양식을 선택하면 자동 입력됩니다."
-                rows={6}
-                className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
-              />
+              <div className="flex-1 min-h-[120px]">
+                <textarea
+                  value={content}
+                  onChange={(e) => setContent(e.target.value)}
+                  placeholder="발송할 메시지를 입력하세요. 오른쪽에서 사전 양식을 선택하면 자동 입력됩니다."
+                  className="w-full h-full min-h-[120px] px-3 py-2 rounded-lg border border-slate-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-500"
+                />
+              </div>
             </div>
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3 shrink-0">
               <span className="text-sm font-medium text-slate-600">발송 유형</span>
               <div className="flex rounded-lg border border-slate-200 overflow-hidden">
                 <button

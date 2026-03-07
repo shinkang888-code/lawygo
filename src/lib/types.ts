@@ -33,15 +33,26 @@ export type CaseStatus =
   | "취하"
   | "종결";
 
+/** 직원 역할 (폼 선택용) */
+export type StaffRoleOption = "임원" | "변호사" | "사무장" | "국장" | "직원";
+/** 직급 (폼 선택용) */
+export type JobTitleOption = "부장" | "팀장" | "과장" | "대리" | "주임" | "인턴";
+
 export interface StaffMember {
   id: string;
   name: string;
-  role: "변호사" | "사무장" | "사무원" | "인턴";
+  role: "임원" | "변호사" | "사무장" | "국장" | "직원" | "사무원" | "인턴"; // 기존 호환 포함
   department: string;
   email: string;
   phone: string;
   level: number; // 결재 레벨
   avatarUrl?: string;
+  /** 직급 (부장, 팀장 등) */
+  jobTitle?: JobTitleOption;
+  /** 회사 전화 */
+  companyPhone?: string;
+  /** 개인 전화 */
+  personalPhone?: string;
 }
 
 export interface ApprovalDoc {
@@ -58,6 +69,8 @@ export interface ApprovalDoc {
   completedAt?: string;
   amount?: number;
   notes?: string;
+  /** 기안 시 첨부 파일 목록 (파일명) */
+  attachmentNames?: string[];
 }
 
 export type ApprovalStatus =
@@ -159,6 +172,12 @@ export interface ConsultationRoom {
   remarks?: string;
 }
 
+/** 상담 담당자 1명 (다중 선택용) */
+export interface ConsultationConsultant {
+  id: string;
+  name: string;
+}
+
 /** 상담 일정·기록 (캘린더 연동, 매치사건으로 관련기록 연결) */
 export interface ConsultationItem {
   id: string;
@@ -167,9 +186,13 @@ export interface ConsultationItem {
   endTime: string;               // HH:mm
   roomId: string;
   roomName: string;
-  consultantId: string;
-  consultantName: string;
-  clientName: string;             // 내담자/방문객명
+  consultantId: string;           // 하위 호환: 첫 담당자
+  consultantName: string;         // 하위 호환: 첫 담당자명
+  /** 상담 담당자 여러 명 (문자 발송 시 복수 입력 형태) */
+  consultants?: ConsultationConsultant[];
+  clientName: string;             // 하위 호환: 첫 내담자
+  /** 방문자(내담자) 여러 명 */
+  clientNames?: string[];
   purpose: string;               // 용건
   importance: "high" | "medium" | "low";
   status: ConsultationStatus;

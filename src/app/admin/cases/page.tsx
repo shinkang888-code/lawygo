@@ -106,7 +106,7 @@ function parseExcelToCases(file: File): Promise<CaseRow[]> {
         const wb = XLSX.read(data, { type: "binary" });
         const firstSheet = wb.SheetNames[0];
         const ws = wb.Sheets[firstSheet];
-        const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { header: 1 }) as unknown[][];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
         if (rows.length < 2) {
           resolve([]);
           return;

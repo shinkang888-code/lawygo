@@ -14,6 +14,7 @@ import {
   Smartphone,
   MoreHorizontal,
 } from "lucide-react";
+import { DragDropContext, Droppable, Draggable, type DropResult } from "@hello-pangea/dnd";
 import { Button } from "@/components/ui/button";
 import { MENU_ICON_OPTIONS } from "@/lib/menuIcons";
 import type { MenuType } from "@/lib/menuService";
@@ -71,6 +72,9 @@ export default function AdminMenusPage() {
 
   const byType = (type: MenuType) =>
     items.filter((r) => r.type === type).sort((a, b) => a.item_order - b.item_order);
+
+  const rowKey = (row: MenuRow) =>
+    row.id ?? (row as MenuRow & { clientId?: string }).clientId ?? `${row.type}-${row.item_id}-${row.item_order}`;
 
   /** 현재 목록 전체를 DB에 저장 (기존 삭제 후 일괄 INSERT) */
   const handleSaveAll = async () => {
@@ -143,6 +147,21 @@ export default function AdminMenusPage() {
     setModalOpen(true);
   };
 
+  /** 드래그로 순서 변경 (같은 타입 내에서만) */
+  const handleDragEnd = (result: DropResult, type: MenuType) => {
+    if (!result.destination || result.destination.index === result.source.index) return;
+    const typed = byType(type);
+    const reordered = [...typed];
+    const [moved] = reordered.splice(result.source.index, 1);
+    reordered.splice(result.destination.index, 0, moved);
+    const withNewOrder = reordered.map((row, i) => ({ ...row, item_order: i }));
+    setItems((prev) => [
+      ...prev.filter((r) => r.type !== type),
+      ...withNewOrder,
+    ]);
+    toast.success("순서가 변경되었습니다. 저장 버튼을 누르면 DB에 반영됩니다.");
+  };
+
   /** 편집/추가 모달 저장: 로컬 state 반영. 실제 DB 반영은 "저장" 버튼으로 */
   const handleModalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -210,67 +229,92 @@ export default function AdminMenusPage() {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden"
           >
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
               <h2 className="font-semibold text-slate-900 flex items-center gap-2">
                 {type === "lnb" && <LayoutPanelLeft size={18} />}
                 {type === "mobile_main" && <Smartphone size={18} />}
                 {type === "mobile_more" && <MoreHorizontal size={18} />}
                 {TYPE_LABELS[type]}
               </h2>
-              <Button size="sm" variant="outline" leftIcon={<Plus size={14} />} onClick={() => handleAdd(type)}>
-                추가
-              </Button>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-text-muted">드래그로 순서 변경</span>
+                <Button size="sm" variant="outline" leftIcon={<Plus size={14} />} onClick={() => handleAdd(type)}>
+                  추가
+                </Button>
+              </div>
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="bg-slate-50/70 text-xs text-text-muted font-medium">
-                    <th className="text-left px-5 py-3 w-10">순서</th>
-                    <th className="text-left px-5 py-3">라벨</th>
-                    <th className="text-left px-5 py-3">경로</th>
-                    <th className="text-left px-5 py-3 w-24">아이콘</th>
-                    <th className="text-left px-5 py-3 w-20">배지</th>
-                    <th className="text-right px-5 py-3 w-24">작업</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {byType(type).length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="px-5 py-6 text-center text-sm text-text-muted">
-                        메뉴가 없습니다. 추가 버튼으로 등록하세요.
-                      </td>
+              <DragDropContext onDragEnd={(r) => handleDragEnd(r, type)}>
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50/70 text-xs text-text-muted font-medium">
+                      <th className="text-left px-2 py-3 w-8" />
+                      <th className="text-left px-5 py-3 w-10">순서</th>
+                      <th className="text-left px-5 py-3">라벨</th>
+                      <th className="text-left px-5 py-3">경로</th>
+                      <th className="text-left px-5 py-3 w-24">아이콘</th>
+                      <th className="text-left px-5 py-3 w-20">배지</th>
+                      <th className="text-right px-5 py-3 w-24">작업</th>
                     </tr>
-                  ) : (
-                    byType(type).map((row) => (
-                      <tr key={row.id ?? (row as MenuRow & { clientId?: string }).clientId ?? `${row.type}-${row.item_id}-${row.item_order}`} className="border-t border-slate-50 text-sm">
-                        <td className="px-5 py-3 tabular-nums text-text-muted">{row.item_order}</td>
-                        <td className="px-5 py-3 font-medium text-slate-800">{row.label}</td>
-                        <td className="px-5 py-3 text-text-muted">{row.href}</td>
-                        <td className="px-5 py-3 text-xs text-slate-600">{row.icon}</td>
-                        <td className="px-5 py-3">{row.badge != null ? row.badge : "-"}</td>
-                        <td className="px-5 py-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => handleEdit(row)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-primary-600"
-                            title="편집"
-                          >
-                            <Pencil size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleDelete(row)}
-                            className="p-1.5 rounded-lg text-slate-500 hover:bg-danger-50 hover:text-danger-600 ml-1"
-                            title="삭제"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                  </thead>
+                  <Droppable droppableId={type}>
+                    {(provided) => (
+                      <tbody ref={provided.innerRef} {...provided.droppableProps}>
+                        {byType(type).length === 0 ? (
+                          <tr>
+                            <td colSpan={7} className="px-5 py-6 text-center text-sm text-text-muted">
+                              메뉴가 없습니다. 추가 버튼으로 등록하세요.
+                            </td>
+                          </tr>
+                        ) : (
+                          byType(type).map((row, index) => (
+                            <Draggable key={rowKey(row)} draggableId={rowKey(row)} index={index}>
+                              {(provided, snapshot) => (
+                                <tr
+                                  ref={provided.innerRef}
+                                  {...provided.draggableProps}
+                                  className={cn(
+                                    "border-t border-slate-50 text-sm",
+                                    snapshot.isDragging && "bg-primary-50 shadow-md"
+                                  )}
+                                >
+                                  <td className="px-2 py-3 text-slate-400" {...provided.dragHandleProps} title="드래그하여 순서 변경">
+                                    <GripVertical size={16} />
+                                  </td>
+                                  <td className="px-5 py-3 tabular-nums text-text-muted">{row.item_order}</td>
+                                  <td className="px-5 py-3 font-medium text-slate-800">{row.label}</td>
+                                  <td className="px-5 py-3 text-text-muted">{row.href}</td>
+                                  <td className="px-5 py-3 text-xs text-slate-600">{row.icon}</td>
+                                  <td className="px-5 py-3">{row.badge != null ? row.badge : "-"}</td>
+                                  <td className="px-5 py-3 text-right">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleEdit(row)}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:bg-slate-100 hover:text-primary-600"
+                                      title="편집"
+                                    >
+                                      <Pencil size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDelete(row)}
+                                      className="p-1.5 rounded-lg text-slate-500 hover:bg-danger-50 hover:text-danger-600 ml-1"
+                                      title="삭제"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </td>
+                                </tr>
+                              )}
+                            </Draggable>
+                          ))
+                        )}
+                        {provided.placeholder}
+                      </tbody>
+                    )}
+                  </Droppable>
+                </table>
+              </DragDropContext>
             </div>
           </motion.section>
         ))
