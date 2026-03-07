@@ -1,6 +1,6 @@
 /**
  * 전문 게시판 중간 관리자 API - 게시판 목록
- * GET: LawGo에서 사용하는 게시판 ID/이름 목록 반환
+ * GET: LawyGo에서 사용하는 게시판 ID/이름 목록 반환
  */
 
 import { NextResponse } from "next/server";

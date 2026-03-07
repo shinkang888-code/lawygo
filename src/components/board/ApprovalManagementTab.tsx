@@ -25,6 +25,7 @@ import {
   type ApprovalDocMeta,
   type ApprovalArchiveFolder,
   type ApprovalArchiveItem,
+  type ApprovalArchivesState,
 } from "@/lib/approvalManagementStorage";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -45,7 +46,13 @@ export function ApprovalManagementTab() {
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedQuery, setAppliedQuery] = useState("");
   const [meta, setMeta] = useState<Record<string, ApprovalDocMeta>>(loadApprovalMeta);
-  const [archives, setArchives] = useState(loadApprovalArchives);
+  const [archives, setArchives] = useState<ApprovalArchivesState>(() => {
+    const loaded = loadApprovalArchives();
+    return {
+      folders: Array.isArray(loaded.folders) ? loaded.folders : [],
+      items: Array.isArray(loaded.items) ? loaded.items : [],
+    };
+  });
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [editingMetaId, setEditingMetaId] = useState<string | null>(null);
   const [editingMetaName, setEditingMetaName] = useState("");
@@ -189,8 +196,9 @@ export function ApprovalManagementTab() {
       toast.error("선택된 문서가 없습니다.");
       return;
     }
-    const nextItems = [...archives.items];
-    const existingDocIds = new Set(archives.items.map((i) => i.approvalDocId));
+    const currentItems = Array.isArray(archives.items) ? archives.items : [];
+    const nextItems = [...currentItems];
+    const existingDocIds = new Set(currentItems.map((i) => i.approvalDocId));
     for (const id of selectedIds) {
       if (existingDocIds.has(id)) continue;
       const doc = completedDocs.find((d) => d.id === id);
@@ -204,7 +212,10 @@ export function ApprovalManagementTab() {
       });
       existingDocIds.add(id);
     }
-    const next = { ...archives, items: nextItems };
+    const next: ApprovalArchivesState = {
+      folders: Array.isArray(archives.folders) ? archives.folders : [],
+      items: nextItems,
+    };
     setArchives(next);
     saveApprovalArchives(next);
     toast.success("자료실에 추가되었습니다.");
@@ -213,9 +224,10 @@ export function ApprovalManagementTab() {
   const createFolder = () => {
     if (!newFolderName.trim()) return;
     const id = `folder-${Date.now()}`;
-    const next = {
-      ...archives,
-      folders: [...archives.folders, { id, name: newFolderName.trim() }],
+    const folders = Array.isArray(archives.folders) ? archives.folders : [];
+    const next: ApprovalArchivesState = {
+      folders: [...folders, { id, name: newFolderName.trim() }],
+      items: Array.isArray(archives.items) ? archives.items : [],
     };
     setArchives(next);
     saveApprovalArchives(next);
@@ -224,23 +236,24 @@ export function ApprovalManagementTab() {
   };
 
   const updateFolderName = (folderId: string, name: string) => {
-    setArchives((prev) => ({
-      ...prev,
-      folders: prev.folders.map((f) => (f.id === folderId ? { ...f, name } : f)),
-    }));
-    saveApprovalArchives({
-      ...archives,
-      folders: archives.folders.map((f) => (f.id === folderId ? { ...f, name } : f)),
-    });
+    const folders = Array.isArray(archives.folders) ? archives.folders : [];
+    const next: ApprovalArchivesState = {
+      folders: folders.map((f) => (f.id === folderId ? { ...f, name } : f)),
+      items: Array.isArray(archives.items) ? archives.items : [],
+    };
+    setArchives(next);
+    saveApprovalArchives(next);
     setEditingFolderId(null);
+    toast.success("폴더명이 저장되었습니다.");
   };
 
   const deleteFolder = (folderId: string) => {
     if (!confirm("폴더를 삭제하면 안의 항목은 루트로 이동합니다. 계속할까요?")) return;
-    const next = {
-      ...archives,
-      folders: archives.folders.filter((f) => f.id !== folderId),
-      items: archives.items.map((i) => (i.folderId === folderId ? { ...i, folderId: null } : i)),
+    const folders = Array.isArray(archives.folders) ? archives.folders : [];
+    const items = Array.isArray(archives.items) ? archives.items : [];
+    const next: ApprovalArchivesState = {
+      folders: folders.filter((f) => f.id !== folderId),
+      items: items.map((i) => (i.folderId === folderId ? { ...i, folderId: null } : i)),
     };
     setArchives(next);
     saveApprovalArchives(next);
@@ -249,9 +262,10 @@ export function ApprovalManagementTab() {
   };
 
   const updateItemName = (itemId: string, displayName: string) => {
-    const next = {
-      ...archives,
-      items: archives.items.map((i) => (i.id === itemId ? { ...i, displayName } : i)),
+    const items = Array.isArray(archives.items) ? archives.items : [];
+    const next: ApprovalArchivesState = {
+      folders: Array.isArray(archives.folders) ? archives.folders : [],
+      items: items.map((i) => (i.id === itemId ? { ...i, displayName } : i)),
     };
     setArchives(next);
     saveApprovalArchives(next);
@@ -259,17 +273,23 @@ export function ApprovalManagementTab() {
   };
 
   const moveItemToFolder = (itemId: string, folderId: string | null) => {
-    setArchives((prev) => ({
-      ...prev,
-      items: prev.items.map((i) => (i.id === itemId ? { ...i, folderId } : i)),
-    }));
-    const updated = archives.items.map((i) => (i.id === itemId ? { ...i, folderId } : i));
-    saveApprovalArchives({ ...archives, items: updated });
+    const items = Array.isArray(archives.items) ? archives.items : [];
+    const next: ApprovalArchivesState = {
+      folders: Array.isArray(archives.folders) ? archives.folders : [],
+      items: items.map((i) => (i.id === itemId ? { ...i, folderId } : i)),
+    };
+    setArchives(next);
+    saveApprovalArchives(next);
   };
 
   const deleteArchiveItem = (itemId: string) => {
-    setArchives((prev) => ({ ...prev, items: prev.items.filter((i) => i.id !== itemId) }));
-    saveApprovalArchives({ ...archives, items: archives.items.filter((i) => i.id !== itemId) });
+    const items = Array.isArray(archives.items) ? archives.items : [];
+    const next: ApprovalArchivesState = {
+      folders: Array.isArray(archives.folders) ? archives.folders : [],
+      items: items.filter((i) => i.id !== itemId),
+    };
+    setArchives(next);
+    saveApprovalArchives(next);
     toast.success("자료실에서 제거되었습니다.");
   };
 
@@ -282,8 +302,10 @@ export function ApprovalManagementTab() {
     moveItemToFolder(itemId, folderId);
   };
 
-  const rootItems = archives.items.filter((i) => !i.folderId);
-  const getFolderItems = (folderId: string) => archives.items.filter((i) => i.folderId === folderId);
+  const safeItems = Array.isArray(archives.items) ? archives.items : [];
+  const safeFolders = Array.isArray(archives.folders) ? archives.folders : [];
+  const rootItems = safeItems.filter((i) => !i.folderId);
+  const getFolderItems = (folderId: string) => safeItems.filter((i) => i.folderId === folderId);
 
   return (
     <section className="space-y-4">
@@ -455,12 +477,13 @@ export function ApprovalManagementTab() {
                 const data = JSON.parse(raw);
                 if (data.type === "approval-doc" && data.id) {
                   const doc = completedDocs.find((d) => d.id === data.id);
-                  if (doc && !archives.items.some((i) => i.approvalDocId === data.id)) {
+                  const currentItems = Array.isArray(archives.items) ? archives.items : [];
+                  if (doc && !currentItems.some((i) => i.approvalDocId === data.id)) {
                     const displayName = meta[doc.id]?.managementName || doc.title;
-                    const next = {
-                      ...archives,
+                    const next: ApprovalArchivesState = {
+                      folders: Array.isArray(archives.folders) ? archives.folders : [],
                       items: [
-                        ...archives.items,
+                        ...currentItems,
                         { id: `arch-${Date.now()}-${data.id}`, approvalDocId: data.id, folderId: null, displayName },
                       ],
                     };
@@ -474,7 +497,7 @@ export function ApprovalManagementTab() {
           >
             <DragDropContext onDragEnd={onArchiveDragEnd}>
               <div className="space-y-2">
-                {archives.folders.map((folder) => (
+                {safeFolders.map((folder) => (
                   <div key={folder.id} className="rounded-lg border border-slate-200 bg-slate-50/50">
                     <div className="flex items-center gap-1 px-2 py-1.5">
                       <FolderOpen size={14} className="text-slate-500" />

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Search, Bell, ChevronDown, X, LogOut } from "lucide-react";
+import { Search, Bell, ChevronDown, X, LogOut, User } from "lucide-react";
 import { mockCases, mockNotifications } from "@/lib/mockData";
 import { formatDate, getDDay } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -17,15 +17,27 @@ export function Header() {
   const [notifOpen, setNotifOpen] = useState(false);
   const [bellRinging, setBellRinging] = useState(false);
   const [userOpen, setUserOpen] = useState(false);
-  const [user, setUser] = useState<{ loginId: string; name: string } | null>(null);
+  const [user, setUser] = useState<{ loginId: string; name: string; role?: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    fetch("/api/auth/session", { credentials: "include" })
-      .then((r) => r.json())
-      .then((d) => d?.user && setUser({ loginId: d.user.loginId, name: d.user.name }));
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.user) setUser({ loginId: d.user.loginId, name: d.user.name, role: d.user.role });
+        else {
+          fetch("/api/auth/session", { credentials: "include" })
+            .then((r) => r.json())
+            .then((s) => s?.user && setUser({ loginId: s.user.loginId, name: s.user.name }));
+        }
+      })
+      .catch(() => {
+        fetch("/api/auth/session", { credentials: "include" })
+          .then((r) => r.json())
+          .then((s) => s?.user && setUser({ loginId: s.user.loginId, name: s.user.name }));
+      });
   }, []);
 
   useGlobalShortcuts({
@@ -230,6 +242,14 @@ export function Header() {
           </button>
           {userOpen && (
             <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+              <Link
+                href="/my"
+                onClick={() => setUserOpen(false)}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <User size={14} />
+                마이페이지
+              </Link>
               <button
                 onClick={handleLogout}
                 className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"

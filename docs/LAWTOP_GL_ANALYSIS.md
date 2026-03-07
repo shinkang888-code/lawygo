@@ -1,4 +1,4 @@
-# LawTop GL 구버전 분석 및 LawGo 이식 참고
+# LawTop GL 구버전 분석 및 LawyGo 이식 참고
 
 ## 1. LawTop GL 설치 구조 (C:\Program Files (x86)\LawTop GL)
 
@@ -11,9 +11,9 @@
 | 설정 | `Bot.ini`, `NoAuto.ini`, `NoAuto2.ini`, `config` (바이너리) | 자동화·봇 설정 |
 | 서브 프로그램 | 아래 표 참조 | 수납/메일/결재/세금/리포트 등 |
 
-### 1.2 서브 프로그램 (LawTop GL 모듈 → LawGo 대응)
+### 1.2 서브 프로그램 (LawTop GL 모듈 → LawyGo 대응)
 
-| LawTop GL 실행파일 | 역할 추정 | LawGo 대응 |
+| LawTop GL 실행파일 | 역할 추정 | LawyGo 대응 |
 |--------------------|-----------|------------|
 | LawTopCashReceipt.exe | 수납 처리 | `/finance` 회계/수납 매칭 |
 | LawTopProcess.exe | 전자결재 | `/approval` 전자결재 |
@@ -49,7 +49,7 @@
 3. **진행관리** → 히스토리, 문서, **기일**, 관련사건, 타임시트, 계약, **수납**
 4. **종결관리** → 종결일, 소요일/월, 종결형태, 성공여부
 
-### 2.2 LawGo에 반영한 핵심 엔티티
+### 2.2 LawyGo에 반영한 핵심 엔티티
 
 - **사건 (cases)** — 사건번호, 종류, 법원, 의뢰인, 상대방, 담당/보조, 진행상태, 수임일, 수임료/수납/미수금
 - **기일 (deadlines)** — 사건별 기일, 기일종류, 불변기일, D-Day
@@ -62,10 +62,10 @@
 
 ---
 
-## 3. DB 설정 방식 (LawGo 권장)
+## 3. DB 설정 방식 (LawyGo 권장)
 
 LawTop GL은 Windows 전용 바이너리라 연결 문자열을 직접 확인할 수 없음.  
-LawGo는 **Supabase(PostgreSQL)** 기준으로 스키마를 정의하며, 필요 시 기존 DB 마이그레이션용 뷰/매핑을 추가할 수 있음.
+LawyGo는 **Supabase(PostgreSQL)** 기준으로 스키마를 정의하며, 필요 시 기존 DB 마이그레이션용 뷰/매핑을 추가할 수 있음.
 
 - 연결 정보: `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (또는 anon key)
 - 스키마: `supabase/migrations/` 참고
@@ -75,7 +75,7 @@ LawGo는 **Supabase(PostgreSQL)** 기준으로 스키마를 정의하며, 필요
 
 ## 4. 메뉴 구성 매핑
 
-| LawTop GL (추정) | LawGo 경로 | 비고 |
+| LawTop GL (추정) | LawyGo 경로 | 비고 |
 |------------------|------------|------|
 | 대시보드/업무현황 | `/` | 기일 카드, 내 업무, 결재 대기 |
 | 사건관리 | `/cases`, `/cases/[id]`, `/cases/new` | 그리드, 상세, 타임라인, 신건등록 |

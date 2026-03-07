@@ -13,6 +13,7 @@ export interface SessionPayload {
   userId: string;
   loginId: string;
   name: string;
+  role?: string;
 }
 
 function encode(data: SessionPayload): string {

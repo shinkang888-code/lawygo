@@ -30,7 +30,7 @@ const filterOptions = [
   },
   {
     field: "court" as const,
-    label: "법원",
+    label: "기관",
     options: [
       "서울고등법원",
       "서울중앙지방법원",
@@ -38,6 +38,8 @@ const filterOptions = [
       "인천지방법원",
       "수원지방법원",
       "헌법재판소",
+      "검찰청",
+      "경찰서",
     ],
   },
 ];

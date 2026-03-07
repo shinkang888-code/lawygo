@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "잘못된 요청입니다." }, { status: 400 });
   }
 
-  const loginId = (body.loginId ?? "").trim();
+  const loginId = (body.loginId ?? "").trim().toLowerCase();
   const password = body.password ?? "";
   const managementNumber = (body.managementNumber ?? "").trim();
 
@@ -48,11 +48,18 @@ export async function POST(request: NextRequest) {
 
   const { data: user, error } = await db
     .from("site_users")
-    .select("id, login_id, password_hash, management_number, status, name")
+    .select("id, login_id, password_hash, management_number, status, name, role")
     .eq("login_id", loginId)
-    .single();
+    .maybeSingle();
 
-  if (error || !user) {
+  if (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.error("[auth/login] DB error:", error.message);
+    }
+    return NextResponse.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
+  }
+
+  if (!user) {
     return NextResponse.json({ error: "아이디 또는 비밀번호가 올바르지 않습니다." }, { status: 401 });
   }
 
@@ -75,9 +82,13 @@ export async function POST(request: NextRequest) {
     userId: user.id,
     loginId: user.login_id,
     name: user.name ?? user.login_id,
+    role: user.role ?? undefined,
   });
 
-  const res = NextResponse.json({ success: true, user: { id: user.id, loginId: user.login_id, name: user.name } });
+  const res = NextResponse.json({
+    success: true,
+    user: { id: user.id, loginId: user.login_id, name: user.name, role: user.role },
+  });
   res.headers.set("Set-Cookie", cookie);
   return res;
 }

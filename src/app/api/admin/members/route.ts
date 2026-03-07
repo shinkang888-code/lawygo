@@ -17,7 +17,7 @@ export async function GET() {
 
   const { data, error } = await db
     .from("site_users")
-    .select("id, login_id, management_number, status, name, created_at, approved_at, approved_by")
+    .select("id, login_id, management_number, status, name, role, created_at, approved_at, approved_by")
     .order("created_at", { ascending: false });
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });

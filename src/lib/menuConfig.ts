@@ -1,5 +1,5 @@
 /**
- * LawGo 메뉴 구성 (LawTop GL 모듈 대응)
+ * LawyGo 메뉴 구성 (LawTop GL 모듈 대응)
  * - LNB/Sidebar, 모바일 Bottom Nav, 권한별 노출
  */
 

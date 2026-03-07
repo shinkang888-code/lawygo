@@ -1,7 +1,7 @@
 # 그누보드6 (G6) 설치 및 연동
 
-LawGo는 **전문 게시판** 기능을 위해 그누보드6(G6)과 하이브리드 연동합니다.  
-G6는 별도 프로세스로 실행되며, LawGo의 **중간 관리자(API 브릿지)** 를 통해 통신합니다.
+LawyGo는 **전문 게시판** 기능을 위해 그누보드6(G6)과 하이브리드 연동합니다.  
+G6는 별도 프로세스로 실행되며, LawyGo의 **중간 관리자(API 브릿지)** 를 통해 통신합니다.
 
 ## 1. G6 설치
 
@@ -40,7 +40,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 기본 URL: `http://localhost:8000`
 
-## 2. LawGo 연동
+## 2. LawyGo 연동
 
 ### 환경 변수 설정
 
@@ -60,5 +60,5 @@ NEXT_PUBLIC_GNUBOARD_API_URL=http://localhost:8000/api
 ### 확인
 
 1. G6가 `http://localhost:8000` 에서 실행 중인지 확인
-2. LawGo 개발 서버 재시작 (`npm run dev`)
+2. LawyGo 개발 서버 재시작 (`npm run dev`)
 3. **전문 게시판** 메뉴에서 게시판 선택 → 게시글 목록이 보이면 연동 완료

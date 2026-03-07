@@ -591,17 +591,18 @@ function ConsultationForm({
     notes: consultation?.notes ?? initial?.notes ?? "",
   }));
 
-  const [consultantSelect, setConsultantSelect] = useState("");
+  const [consultantInput, setConsultantInput] = useState("");
   const [visitorInput, setVisitorInput] = useState("");
 
   const consultants = form.consultants ?? (form.consultantId ? [{ id: form.consultantId, name: form.consultantName ?? "" }] : []);
   const clientNames = form.clientNames ?? (form.clientName ? [form.clientName] : []);
 
-  const addConsultant = (staffId: string) => {
-    const s = staff.find((x) => x.id === staffId);
-    if (!s || consultants.some((c) => c.id === s.id)) return;
-    setForm((p) => ({ ...p, consultants: [...consultants, { id: s.id, name: s.name }], consultantId: consultants[0]?.id ?? s.id, consultantName: consultants[0]?.name ?? s.name }));
-    setConsultantSelect("");
+  const addConsultantByName = (name: string) => {
+    const n = name.trim();
+    if (!n || consultants.some((c) => c.name === n)) return;
+    const id = `consultant-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    setForm((p) => ({ ...p, consultants: [...consultants, { id, name: n }], consultantId: consultants[0]?.id ?? id, consultantName: consultants[0]?.name ?? n }));
+    setConsultantInput("");
   };
   const removeConsultant = (id: string) => {
     const next = consultants.filter((c) => c.id !== id);
@@ -623,7 +624,7 @@ function ConsultationForm({
     const finalConsultants = form.consultants?.length ? form.consultants : consultants;
     const finalClientNames = form.clientNames?.length ? form.clientNames : clientNames;
     if (finalConsultants.length === 0) {
-      toast.error("상담 담당자를 1명 이상 선택하세요.");
+      toast.error("상담 담당자를 1명 이상 추가하세요.");
       return;
     }
     if (finalClientNames.length === 0 && !form.purpose?.trim()) {
@@ -726,19 +727,17 @@ function ConsultationForm({
                   </button>
                 </span>
               ))}
-              <select
-                value={consultantSelect}
-                onChange={(e) => { const v = e.target.value; if (v) addConsultant(v); }}
-                onBlur={() => setConsultantSelect("")}
+              <input
+                type="text"
+                value={consultantInput}
+                onChange={(e) => setConsultantInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === ",") { e.preventDefault(); addConsultantByName(consultantInput); } }}
+                placeholder="이름 입력 후 Enter"
                 className="flex-1 min-w-[120px] px-2 py-1 text-sm border-0 bg-transparent focus:outline-none focus:ring-0 text-slate-600"
-              >
-                <option value="">+ 담당자 추가</option>
-                {staff.filter((s) => !consultants.some((c) => c.id === s.id)).map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
-                ))}
-              </select>
+              />
             </div>
-            {consultants.length === 0 && <p className="text-2xs text-text-muted mt-0.5">드롭다운에서 선택하면 칩으로 추가됩니다.</p>}
+            <button type="button" onClick={() => addConsultantByName(consultantInput)} className="text-xs text-primary-600 hover:underline mt-1">+ 담당자 추가</button>
+            {consultants.length === 0 && <p className="text-2xs text-text-muted mt-0.5">이름 입력 후 Enter로 추가합니다.</p>}
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-600 mb-1">방문자(내담자)/용건 *</label>

@@ -1,6 +1,6 @@
 /**
  * 전문 게시판 중간 관리자 (Board Bridge)
- * LawGo ↔ G6(그누보드6) 연동 시 에러·폴백·정규화를 담당합니다.
+ * LawyGo ↔ G6(그누보드6) 연동 시 에러·폴백·정규화를 담당합니다.
  * - 프론트/API 라우트는 이 모듈만 사용하고, G6를 직접 호출하지 않습니다.
  */
 
@@ -24,7 +24,7 @@ export interface BridgeResult<T> {
   source: "g6" | "fallback";
 }
 
-/** LawGo에서 사용하는 게시물 타입 (G6 필드 매핑) */
+/** LawyGo에서 사용하는 게시물 타입 (G6 필드 매핑) */
 export interface BoardPost {
   id: number;
   subject: string;
@@ -39,7 +39,7 @@ export interface BoardPost {
   caseType?: string;
 }
 
-/** LawGo에서 사용하는 댓글 타입 */
+/** LawyGo에서 사용하는 댓글 타입 */
 export interface BoardComment {
   id: number;
   postId: number;

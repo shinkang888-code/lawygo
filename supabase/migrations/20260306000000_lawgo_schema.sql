@@ -1,4 +1,4 @@
--- LawGo 스키마 (LawTop GL 송무 로직 반영)
+-- LawyGo 스키마 (LawTop GL 송무 로직 반영)
 -- Supabase PostgreSQL
 
 -- 확장

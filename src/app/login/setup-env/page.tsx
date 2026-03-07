@@ -70,7 +70,7 @@ export default function SetupEnvPage() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">LawGo</h1>
+        <h1 className="text-2xl font-bold text-slate-900">LawyGo</h1>
         <p className="text-sm text-slate-600 mt-1">Supabase 키 설정</p>
       </div>
 

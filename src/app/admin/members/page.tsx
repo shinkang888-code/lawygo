@@ -13,6 +13,7 @@ interface Member {
   management_number: string;
   status: string;
   name: string | null;
+  role: string | null;
   created_at: string;
   approved_at: string | null;
   approved_by: string | null;
@@ -198,6 +199,7 @@ export default function AdminMembersPage() {
                     <th className="text-left p-3 w-10">선택</th>
                     <th className="text-left p-3">아이디</th>
                     <th className="text-left p-3">이름</th>
+                    <th className="text-left p-3">직급</th>
                     <th className="text-left p-3">관리번호</th>
                     <th className="text-left p-3">가입일</th>
                   </tr>
@@ -205,7 +207,7 @@ export default function AdminMembersPage() {
                 <tbody>
                   {pending.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-slate-500">대기 중인 회원이 없습니다.</td>
+                      <td colSpan={6} className="p-6 text-center text-slate-500">대기 중인 회원이 없습니다.</td>
                     </tr>
                   ) : (
                     pending.map((m) => (
@@ -219,6 +221,7 @@ export default function AdminMembersPage() {
                         </td>
                         <td className="p-3 font-medium">{m.login_id}</td>
                         <td className="p-3">{m.name ?? "-"}</td>
+                        <td className="p-3 text-slate-600">{m.role ?? "-"}</td>
                         <td className="p-3 text-slate-600">{m.management_number}</td>
                         <td className="p-3 text-slate-500">{formatDate(m.created_at)}</td>
                       </tr>
@@ -240,6 +243,7 @@ export default function AdminMembersPage() {
                   <tr className="bg-slate-50 border-b border-slate-100">
                     <th className="text-left p-3">아이디</th>
                     <th className="text-left p-3">이름</th>
+                    <th className="text-left p-3">직급</th>
                     <th className="text-left p-3">관리번호</th>
                     <th className="text-left p-3">가입일</th>
                     <th className="text-left p-3">승인일</th>
@@ -248,13 +252,14 @@ export default function AdminMembersPage() {
                 <tbody>
                   {approved.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="p-6 text-center text-slate-500">승인된 회원이 없습니다.</td>
+                      <td colSpan={6} className="p-6 text-center text-slate-500">승인된 회원이 없습니다.</td>
                     </tr>
                   ) : (
                     approved.map((m) => (
                       <tr key={m.id} className="border-b border-slate-50 hover:bg-slate-50/50">
                         <td className="p-3 font-medium">{m.login_id}</td>
                         <td className="p-3">{m.name ?? "-"}</td>
+                        <td className="p-3 text-slate-600">{m.role ?? "-"}</td>
                         <td className="p-3 text-slate-600">{m.management_number}</td>
                         <td className="p-3 text-slate-500">{formatDate(m.created_at)}</td>
                         <td className="p-3 text-slate-500">{m.approved_at ? formatDate(m.approved_at) : "-"}</td>

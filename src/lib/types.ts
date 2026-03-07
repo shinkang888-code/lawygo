@@ -1,4 +1,4 @@
-/** LawGo 핵심 데이터 타입 정의 */
+/** LawyGo 핵심 데이터 타입 정의 */
 
 export interface CaseItem {
   id: string;

@@ -51,7 +51,7 @@ export default function LoginPage() {
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">LawGo</h1>
+        <h1 className="text-2xl font-bold text-slate-900">LawyGo</h1>
         <p className="text-sm text-slate-600 mt-1">법무 관리 시스템 로그인</p>
       </div>
 

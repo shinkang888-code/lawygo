@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useParams } from "next/navigation";
 import Link from "next/link";
@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
 import { mockCases, mockTimeline } from "@/lib/mockData";
+import { loadCourtOverrides } from "@/lib/caseCourtOverrides";
 import { cn, formatDate, getDDay, formatAmount, formatFileSize } from "@/lib/utils";
 import { StatusBadge, DDayBadge, ElectronicBadge, ImmutableBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,8 +32,14 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const caseItem = mockCases.find((c) => c.id === id) ?? mockCases[0];
+  const baseCase = mockCases.find((c) => c.id === id) ?? mockCases[0];
+  const [courtOverrides, setCourtOverrides] = useState<Record<string, string>>(() => loadCourtOverrides());
+  const caseItem = { ...baseCase, court: courtOverrides[baseCase.id] ?? baseCase.court };
   const timeline = mockTimeline.filter((t) => t.caseId === caseItem.id);
+
+  useEffect(() => {
+    setCourtOverrides(loadCourtOverrides());
+  }, [id]);
 
   const [activeTab, setActiveTab] = useState<TabId>("timeline");
   const [memoText, setMemoText] = useState("");
@@ -102,7 +109,7 @@ export default function CaseDetailPage() {
             <SectionTitle>당사자 정보</SectionTitle>
             <InfoItem icon="👤" label="의뢰인" value={`${caseItem.clientName} (${caseItem.clientPosition})`} />
             <InfoItem icon="⚔️" label="상대방" value={caseItem.opponentName} />
-            <InfoItem icon="🏛️" label="법원" value={caseItem.court} />
+            <InfoItem icon="🏛️" label="기관" value={caseItem.court} />
             <button
               type="button"
               onClick={() => copyAndOpenScourtSearch(caseItem.caseNumber, caseItem.clientName)}
@@ -398,7 +405,7 @@ function DatesTab({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
             <tr className="bg-slate-50 text-xs text-text-muted font-medium border-b border-slate-100">
               <th className="text-left px-4 py-3">기일</th>
               <th className="text-left px-4 py-3">종류</th>
-              <th className="text-left px-4 py-3">법원</th>
+              <th className="text-left px-4 py-3">기관</th>
               <th className="text-left px-4 py-3">D-Day</th>
               <th className="text-left px-4 py-3">상태</th>
             </tr>

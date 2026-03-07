@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
@@ -52,12 +52,30 @@ const iconMap: Record<string, React.ComponentType<{ size?: number }>> = {
   Send,
 };
 
-const currentUser = { name: "김민준", role: "변호사", permissions: ["관리자", "변호사"] };
+const FALLBACK_USER = { name: "사용자", role: "직원", permissions: ["직원"] };
 
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const pathname = usePathname();
   const { lnb } = useMenus();
+  const [currentUser, setCurrentUser] = useState<{ name: string; role: string; permissions: string[] }>(FALLBACK_USER);
+
+  useEffect(() => {
+    fetch("/api/auth/me", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (d?.user) {
+          const name = d.user.name || d.user.loginId || "사용자";
+          const role = d.user.role || "직원";
+          setCurrentUser({
+            name,
+            role,
+            permissions: [role, "관리자", "변호사", "사무장", "직원"].filter((p, i, a) => a.indexOf(p) === i),
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const filteredNav = getMenuForRoles(lnb, currentUser.permissions).filter((item) => item.href !== "#more");
 
@@ -79,7 +97,7 @@ export function Sidebar() {
         </div>
         {!collapsed && (
           <div className="overflow-hidden">
-            <div className="text-white font-bold text-lg leading-tight tracking-tight">LawGo</div>
+            <div className="text-white font-bold text-lg leading-tight tracking-tight">LawyGo</div>
             <div className="text-slate-400 text-xs">법무 관리 시스템</div>
           </div>
         )}
@@ -136,18 +154,22 @@ export function Sidebar() {
         </ul>
       </nav>
 
-      {/* User info + Collapse toggle */}
+      {/* User info (로그인 회원 계정) + Collapse toggle */}
       <div className="border-t border-slate-700/50 p-3 space-y-2">
         {!collapsed && (
-          <div className="flex items-center gap-2.5 px-1 py-1.5 rounded-lg hover:bg-slate-700/40 cursor-pointer">
+          <Link
+            href="/my"
+            className="flex items-center gap-2.5 px-1 py-1.5 rounded-lg hover:bg-slate-700/40 transition-colors"
+            title="마이페이지"
+          >
             <div className="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
               {currentUser.name[0]}
             </div>
-            <div className="overflow-hidden">
+            <div className="overflow-hidden min-w-0">
               <div className="text-sm font-medium text-white truncate">{currentUser.name}</div>
-              <div className="text-xs text-slate-400 truncate">{currentUser.role}</div>
+              <div className="text-xs text-slate-400 truncate">{currentUser.role || "직원"}</div>
             </div>
-          </div>
+          </Link>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}

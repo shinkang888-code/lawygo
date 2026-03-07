@@ -47,11 +47,13 @@ import { CaseRowSkeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { toast } from "@/components/ui/toast";
 
+import { loadCourtOverrides, saveCourtOverrides } from "@/lib/caseCourtOverrides";
+
 const columns: { key: keyof CaseItem; label: string; width?: string; sortable?: boolean }[] = [
   { key: "caseNumber", label: "사건번호", width: "140px", sortable: true },
   { key: "caseType", label: "종류", width: "60px" },
   { key: "caseName", label: "사건명", sortable: true },
-  { key: "court", label: "법원", width: "160px" },
+  { key: "court", label: "기관", width: "160px" },
   { key: "clientName", label: "의뢰인", width: "100px", sortable: true },
   { key: "clientPosition", label: "지위", width: "70px" },
   { key: "assignedStaff", label: "담당", width: "80px" },
@@ -91,6 +93,15 @@ export default function CasesPage() {
     loadCaseFiles(getInitialFilesFromMock(mockTimeline))
   );
   const [caseFolders, setCaseFolders] = useState<Record<string, CaseFolder[]>>(loadCaseFolders);
+  const [courtOverrides, setCourtOverrides] = useState<Record<string, string>>(loadCourtOverrides);
+
+  const updateCourt = (caseId: string, value: string) => {
+    setCourtOverrides((prev) => {
+      const next = value.trim() ? { ...prev, [caseId]: value.trim() } : (() => { const u = { ...prev }; delete u[caseId]; return u; })();
+      saveCourtOverrides(next);
+      return next;
+    });
+  };
 
   const updateMemos = (caseId: string, memos: Timeline[]) => {
     setCaseMemos((prev) => {
@@ -127,7 +138,11 @@ export default function CasesPage() {
   };
 
   const filtered = useMemo(() => {
-    let result = [...mockCases];
+    const withCourt = mockCases.map((c) => ({
+      ...c,
+      court: courtOverrides[c.id] ?? c.court,
+    }));
+    let result = [...withCourt];
 
     if (appliedSearch.trim()) {
       const q = appliedSearch.trim().toLowerCase();
@@ -166,7 +181,7 @@ export default function CasesPage() {
     });
 
     return result;
-  }, [appliedSearch, appliedStaffSearch, filters, sort]);
+  }, [appliedSearch, appliedStaffSearch, filters, sort, courtOverrides]);
 
   const toggleSort = (field: keyof CaseItem) => {
     setSort((prev) =>
@@ -206,7 +221,7 @@ export default function CasesPage() {
       "사건번호",
       "사건종류",
       "사건명",
-      "법원",
+      "기관",
       "의뢰인",
       "의뢰인지위",
       "담당",
@@ -444,8 +459,17 @@ export default function CasesPage() {
                           <div className="font-medium text-slate-800">{c.caseName}</div>
                         </td>
 
-                        {/* 법원 */}
-                        <td className="px-3 py-2.5 text-slate-600 text-xs">{c.court}</td>
+                        {/* 기관: 직접 입력, localStorage 반영 (법원·검찰·경찰 등) */}
+                        <td className="px-3 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
+                          <input
+                            type="text"
+                            value={c.court}
+                            onChange={(e) => updateCourt(c.id, e.target.value)}
+                            placeholder="법원·검찰·경찰 등"
+                            className="w-full min-w-[120px] px-2 py-1 rounded border border-slate-200 text-slate-700 bg-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 outline-none"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </td>
 
                         {/* 의뢰인 */}
                         <td className="px-3 py-2.5 font-medium text-slate-800">{c.clientName}</td>

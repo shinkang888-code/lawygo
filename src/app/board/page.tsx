@@ -209,7 +209,7 @@ export default function BoardListPage() {
         <div className="rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm text-text-muted space-y-3">
           <p className="font-medium text-slate-700">하이브리드 연동 안내</p>
           <p>
-            <strong>G6:</strong> LawGo는 중간 관리자(API 브릿지)를 통해 G6와 통신합니다. 설정은{" "}
+            <strong>G6:</strong> LawyGo는 중간 관리자(API 브릿지)를 통해 G6와 통신합니다. 설정은{" "}
             <code className="bg-white px-1 rounded">.env.local</code>의{" "}
             <code className="bg-white px-1 rounded">NEXT_PUBLIC_GNUBOARD_API_URL</code>에서 확인하세요.
           </p>
