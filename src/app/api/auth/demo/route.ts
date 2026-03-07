@@ -1,6 +1,6 @@
 /**
  * 데모 로그인: 관리자 계정으로 세션만 발급 (비밀번호 없이)
- * DEMO 버튼용. 계정이 없으면 자동 생성 후 로그인.
+ * DEMO 버튼용. upsert로 데모 계정을 보장한 뒤 로그인.
  * ENABLE_DEMO_LOGIN=false 로 비활성화 가능.
  */
 
@@ -22,30 +22,16 @@ export async function POST() {
   const db = getSupabaseAdmin();
   if (!db) {
     return NextResponse.json(
-      { error: "DB가 연결되지 않았습니다." },
+      { error: "DB가 연결되지 않았습니다. Vercel 환경 변수를 확인해 주세요." },
       { status: 503 }
     );
   }
 
-  let { data: user, error } = await db
+  const password_hash = hashPassword(DEMO_PASSWORD);
+  const { error: upsertError } = await db
     .from("site_users")
-    .select("id, login_id, name")
-    .eq("login_id", DEMO_LOGIN_ID)
-    .eq("status", "approved")
-    .maybeSingle();
-
-  if (error) {
-    return NextResponse.json(
-      { error: "데모 계정 조회 중 오류가 발생했습니다. Supabase에 site_users 테이블이 있는지 확인해 주세요." },
-      { status: 500 }
-    );
-  }
-
-  if (!user) {
-    const password_hash = hashPassword(DEMO_PASSWORD);
-    const { data: inserted, error: insertError } = await db
-      .from("site_users")
-      .insert({
+    .upsert(
+      {
         login_id: DEMO_LOGIN_ID,
         password_hash,
         management_number: DEMO_MANAGEMENT_NUMBER,
@@ -53,40 +39,38 @@ export async function POST() {
         status: "approved",
         approved_at: new Date().toISOString(),
         approved_by: "demo",
-      })
-      .select("id, login_id, name")
-      .single();
+      },
+      { onConflict: "login_id" }
+    );
 
-    if (insertError) {
-      if (insertError.code === "23505") {
-        const { data: updated } = await db
-          .from("site_users")
-          .update({
-            status: "approved",
-            approved_at: new Date().toISOString(),
-            approved_by: "demo",
-          })
-          .eq("login_id", DEMO_LOGIN_ID)
-          .select("id, login_id, name")
-          .maybeSingle();
-        if (updated) user = updated;
-      }
-      if (!user) {
-        return NextResponse.json(
-          { error: "데모 계정 생성에 실패했습니다. DB 마이그레이션을 확인해 주세요." },
-          { status: 500 }
-        );
-      }
-    } else {
-      user = inserted;
-    }
+  if (upsertError) {
+    return NextResponse.json(
+      {
+        error:
+          "데모 계정을 준비하지 못했습니다. Supabase에 site_users 테이블이 있고, 마이그레이션이 적용되었는지 확인해 주세요.",
+      },
+      { status: 500 }
+    );
+  }
+
+  const { data: user, error: selectError } = await db
+    .from("site_users")
+    .select("id, login_id, name")
+    .eq("login_id", DEMO_LOGIN_ID)
+    .single();
+
+  if (selectError || !user) {
+    return NextResponse.json(
+      { error: "데모 계정 조회에 실패했습니다." },
+      { status: 500 }
+    );
   }
 
   const cookie = createSessionCookie({
     userId: user.id,
     loginId: user.login_id,
     name: user.name ?? user.login_id,
-    role: (user as { role?: string }).role ?? undefined,
+    role: undefined,
   });
 
   const res = NextResponse.json({
