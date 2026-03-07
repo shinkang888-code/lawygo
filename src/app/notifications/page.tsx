@@ -1,12 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { mockNotifications } from "@/lib/mockData";
 import { formatDate } from "@/lib/utils";
 import { Bell, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import type { Notification } from "@/lib/types";
+
+const PENDING_NOTIFICATIONS_KEY = "lawygo:pending-notifications";
 
 /** 알림을 날짜별로 그룹화 (날짜 키: YYYY.MM.DD) */
 function groupByDate(list: Notification[]): { dateKey: string; dateLabel: string; items: Notification[] }[] {
@@ -25,7 +28,28 @@ function groupByDate(list: Notification[]): { dateKey: string; dateLabel: string
 }
 
 export default function NotificationsPage() {
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>(mockNotifications);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PENDING_NOTIFICATIONS_KEY);
+      if (raw) {
+        const pending = JSON.parse(raw) as Notification[];
+        if (pending.length > 0) {
+          setNotifications((prev) => [...pending, ...prev]);
+          localStorage.removeItem(PENDING_NOTIFICATIONS_KEY);
+        }
+      }
+    } catch {}
+
+    const onAdd = (e: CustomEvent<Notification[]>) => {
+      const list = e.detail ?? [];
+      if (list.length) setNotifications((prev) => [...list, ...prev]);
+    };
+    window.addEventListener("lawygo:add-notifications", onAdd as EventListener);
+    return () => window.removeEventListener("lawygo:add-notifications", onAdd as EventListener);
+  }, []);
 
   const byDate = useMemo(() => groupByDate(notifications), [notifications]);
 
@@ -39,7 +63,11 @@ export default function NotificationsPage() {
 
   const openRelated = (n: Notification) => {
     const url = n.link ?? (n.caseId ? `/cases/${n.caseId}` : "/");
-    window.open(url, "_blank", "noopener,noreferrer");
+    if (n.approvalDocId) {
+      router.push(url);
+    } else {
+      window.open(url, "_blank", "noopener,noreferrer");
+    }
     markRead(n.id);
   };
 

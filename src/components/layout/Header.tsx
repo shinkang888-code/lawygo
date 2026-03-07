@@ -2,7 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Bell, ChevronDown, X } from "lucide-react";
+import Link from "next/link";
+import { Search, Bell, ChevronDown, X, LogOut } from "lucide-react";
 import { mockCases, mockNotifications } from "@/lib/mockData";
 import { formatDate, getDDay } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -15,8 +16,17 @@ export function Header() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [bellRinging, setBellRinging] = useState(false);
+  const [userOpen, setUserOpen] = useState(false);
+  const [user, setUser] = useState<{ loginId: string; name: string } | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
+  const userRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => d?.user && setUser({ loginId: d.user.loginId, name: d.user.name }));
+  }, []);
 
   useGlobalShortcuts({
     onSearchFocus: () => searchRef.current?.focus(),
@@ -51,13 +61,19 @@ export function Header() {
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
-        setNotifOpen(false);
-      }
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
+      if (userRef.current && !userRef.current.contains(e.target as Node)) setUserOpen(false);
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, []);
+
+  const handleLogout = async () => {
+    await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
+    setUserOpen(false);
+    router.replace("/login");
+    router.refresh();
+  };
 
   const handleBellClick = () => {
     setNotifOpen(!notifOpen);
@@ -197,17 +213,33 @@ export function Header() {
           )}
         </div>
 
-        {/* User profile */}
-        <button className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors">
-          <div className="w-7 h-7 bg-primary-600 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-            김
-          </div>
-          <div className="text-left hidden sm:block">
-            <div className="text-sm font-medium text-slate-800 leading-tight">김민준</div>
-            <div className="text-xs text-text-muted leading-tight">변호사</div>
-          </div>
-          <ChevronDown size={14} className="text-slate-400 hidden sm:block" />
-        </button>
+        {/* User profile + logout */}
+        <div className="relative" ref={userRef}>
+          <button
+            onClick={() => setUserOpen(!userOpen)}
+            className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg hover:bg-slate-100 transition-colors"
+          >
+            <div className="w-7 h-7 bg-primary-600 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
+              {user?.name?.slice(0, 1) ?? user?.loginId?.slice(0, 1) ?? "?"}
+            </div>
+            <div className="text-left hidden sm:block">
+              <div className="text-sm font-medium text-slate-800 leading-tight">{user?.name || user?.loginId || "사용자"}</div>
+              <div className="text-xs text-text-muted leading-tight">{user?.loginId ?? ""}</div>
+            </div>
+            <ChevronDown size={14} className="text-slate-400 hidden sm:block" />
+          </button>
+          {userOpen && (
+            <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 py-1">
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                <LogOut size={14} />
+                로그아웃
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );

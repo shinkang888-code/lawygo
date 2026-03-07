@@ -144,6 +144,8 @@ export interface Notification {
   caseId?: string;
   createdAt: string;
   link?: string;
+  /** 결재 요청 알림일 때 결재 문서 ID */
+  approvalDocId?: string;
 }
 
 export interface UserProfile {

@@ -22,7 +22,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/components/ui/toast";
 
-const TIME_SLOTS = Array.from({ length: 19 }, (_, i) => {
+// 09:00 ~ 21:00, 30분 단위 (25개 슬롯)
+const TIME_SLOTS = Array.from({ length: 25 }, (_, i) => {
   const h = 9 + Math.floor(i / 2);
   const m = (i % 2) * 30;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
@@ -54,6 +55,27 @@ function getConsultationsForSlot(
   );
 }
 
+function getConsultantNames(c: ConsultationItem): string[] {
+  if (c.consultants?.length) return c.consultants.map((x) => x.name).filter(Boolean);
+  if (c.consultantName) return [c.consultantName];
+  return [];
+}
+
+function isConsultantMatch(names: string[], query: string): boolean {
+  const q = query.trim();
+  if (!q) return false;
+  return names.some((n) => n.includes(q) || q.includes(n));
+}
+
+const MY_HIGHLIGHT_COLORS = [
+  { id: "red" as const, label: "빨강", bg: "bg-red-100", text: "text-red-800", border: "border-red-300" },
+  { id: "orange" as const, label: "주황", bg: "bg-orange-100", text: "text-orange-800", border: "border-orange-300" },
+  { id: "green" as const, label: "초록", bg: "bg-emerald-100", text: "text-emerald-800", border: "border-emerald-300" },
+  { id: "blue" as const, label: "파랑", bg: "bg-blue-100", text: "text-blue-800", border: "border-blue-300" },
+  { id: "purple" as const, label: "보라", bg: "bg-violet-100", text: "text-violet-800", border: "border-violet-300" },
+] as const;
+type MyHighlightColorId = (typeof MY_HIGHLIGHT_COLORS)[number]["id"];
+
 export default function ConsultationPage() {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date");
@@ -73,6 +95,18 @@ export default function ConsultationPage() {
   const [roomFormOpen, setRoomFormOpen] = useState(false);
   const [editingRoom, setEditingRoom] = useState<ConsultationRoom | null>(null);
   const [formInitial, setFormInitial] = useState<Partial<ConsultationItem> | null>(null);
+  /** 로그인한 본인 이름 (상담자에 포함되면 선택한 색으로 강조) */
+  const [currentUserName, setCurrentUserName] = useState<string | null>(null);
+  /** 상담자 이름 검색어 (입력 시 해당 이름 포함된 예약은 파란색으로 강조) */
+  const [counselorSearch, setCounselorSearch] = useState("");
+  /** 본인 상담 강조 색 */
+  const [myHighlightColorId, setMyHighlightColorId] = useState<MyHighlightColorId>("red");
+
+  useEffect(() => {
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((r) => r.json())
+      .then((d) => d?.user?.name && setCurrentUserName(d.user.name));
+  }, []);
 
   const prevDay = () => {
     const d = new Date(viewDate);
@@ -243,6 +277,39 @@ export default function ConsultationPage() {
             <p className="text-xs text-text-muted">
               예약하기: 빈 칸 더블클릭 · 초록/회색 → 예약가능 · 주황 → 예약내역 (클릭 시 편집)
             </p>
+            {/* 내 상담 강조 색 + 상담자 검색 */}
+            <div className="flex flex-wrap items-center gap-4 py-2 px-3 rounded-xl bg-slate-50 border border-slate-200">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">내 상담 강조 색:</span>
+                <div className="flex gap-1">
+                  {MY_HIGHLIGHT_COLORS.map(({ id, label, bg }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setMyHighlightColorId(id)}
+                      className={cn(
+                        "w-7 h-7 rounded-lg border-2 transition-all",
+                        myHighlightColorId === id ? "border-slate-800 ring-1 ring-slate-400" : "border-slate-200 hover:border-slate-400",
+                        bg
+                      )}
+                      title={label}
+                      aria-label={label}
+                    />
+                  ))}
+                </div>
+                <span className="text-2xs text-text-muted">(본인이 담당인 예약)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-medium text-slate-600">상담자 검색:</span>
+                <input
+                  type="text"
+                  value={counselorSearch}
+                  onChange={(e) => setCounselorSearch(e.target.value)}
+                  placeholder="이름 입력 시 파란색 강조"
+                  className="w-40 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white"
+                />
+              </div>
+            </div>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-x-auto">
               <table className="w-full border-collapse min-w-[800px]">
                 <thead>
@@ -264,17 +331,35 @@ export default function ConsultationPage() {
                       {TIME_SLOTS.map((slot) => {
                         const items = getConsultationsForSlot(consultations, viewDate, room.id, slot);
                         const cell = items[0];
+                        const consultantNames = cell ? getConsultantNames(cell) : [];
+                        const isMine = !!currentUserName && isConsultantMatch(consultantNames, currentUserName);
+                        const isSearchMatch = !!cell && isConsultantMatch(consultantNames, counselorSearch);
+                        const myColor = MY_HIGHLIGHT_COLORS.find((x) => x.id === myHighlightColorId);
+                        const cellBg = cell
+                          ? isMine && myColor
+                            ? myColor.bg
+                            : isSearchMatch
+                              ? "bg-primary-100"
+                              : "bg-warning-50"
+                          : "bg-success-50/50 hover:bg-success-100/70 cursor-pointer";
+                        const cellText = cell
+                          ? isMine && myColor
+                            ? myColor.text
+                            : isSearchMatch
+                              ? "text-primary-800"
+                              : "text-warning-800"
+                          : "";
                         return (
                           <td
                             key={slot}
                             className={cn(
                               "p-0.5 h-10 border-l border-slate-100 align-top",
-                              cell ? "bg-warning-50" : "bg-success-50/50 hover:bg-success-100/70 cursor-pointer"
+                              cellBg
                             )}
                             onDoubleClick={() => {
                               if (!cell) {
                                 const next = TIME_SLOTS.indexOf(slot) + 1;
-                                const endSlot = TIME_SLOTS[next] ?? "18:30";
+                                const endSlot = TIME_SLOTS[next] ?? "21:30";
                                 setFormInitial({
                                   consultationDate: viewDate,
                                   startTime: slot,
@@ -297,8 +382,8 @@ export default function ConsultationPage() {
                           >
                             {cell && (
                               <div
-                                className="text-2xs truncate px-0.5 text-warning-800"
-                                title={`방문: ${(cell.clientNames?.length ? cell.clientNames : (cell.clientName ? [cell.clientName] : [])).join(", ")} · 담당: ${(cell.consultants?.length ? cell.consultants.map((x) => x.name) : [cell.consultantName]).join(", ")}${cell.purpose ? ` · ${cell.purpose}` : ""}`}
+                                className={cn("text-2xs truncate px-0.5 font-medium", cellText)}
+                                title={`방문: ${(cell.clientNames?.length ? cell.clientNames : (cell.clientName ? [cell.clientName] : [])).join(", ")} · 담당: ${consultantNames.join(", ")}${cell.purpose ? ` · ${cell.purpose}` : ""}`}
                               >
                                 {(cell.clientNames?.length ? cell.clientNames : (cell.clientName ? [cell.clientName] : [])).join(", ")}
                               </div>

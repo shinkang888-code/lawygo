@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
 import { mockCases, mockTimeline } from "@/lib/mockData";
-import { cn, formatDate, getDDay, formatAmount } from "@/lib/utils";
+import { cn, formatDate, getDDay } from "@/lib/utils";
 import type { CaseItem, FilterConfig, SortConfig, Timeline } from "@/lib/types";
 import {
   getInitialMemosFromMock,
@@ -58,7 +58,6 @@ const columns: { key: keyof CaseItem; label: string; width?: string; sortable?: 
   { key: "assistants", label: "보조", width: "160px" },
   { key: "nextDate", label: "다음 기일", width: "110px", sortable: true },
   { key: "status", label: "상태", width: "80px" },
-  { key: "pendingAmount", label: "미수금", width: "110px", sortable: true },
 ];
 
 export default function CasesPage() {
@@ -215,7 +214,6 @@ export default function CasesPage() {
       "다음기일",
       "기일종류",
       "상태",
-      "미수금",
     ];
     const rows = filtered.map((c) => [
       c.caseNumber,
@@ -229,7 +227,6 @@ export default function CasesPage() {
       c.nextDate ?? "",
       c.nextDateType,
       c.status,
-      String(c.pendingAmount),
     ]);
 
     const escape = (value: string) => {
@@ -261,102 +258,104 @@ export default function CasesPage() {
 
   return (
     <div className="flex flex-col h-full">
-      {/* Page header */}
-      <div className="bg-white border-b border-slate-200 px-6 py-4">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-bold text-slate-900">사건 관리</h1>
-            <p className="text-sm text-text-muted mt-0.5">
-              {appliedSearch.trim() || appliedStaffSearch.trim() ? "검색 결과 " : "전체 "}
+      {/* Page header: 절반 세로 크기로 축소, 검색·필터·버튼 한 칸에 배치 */}
+      <div className="bg-white border-b border-slate-200 px-4 py-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          {/* 제목 + 건수 */}
+          <div className="flex items-center gap-2 shrink-0">
+            <h1 className="text-base font-bold text-slate-900">사건 관리</h1>
+            <span className="text-xs text-text-muted">
+              {appliedSearch.trim() || appliedStaffSearch.trim() ? "검색 " : "전체 "}
               <span className="text-primary-600 font-semibold">{filtered.length}</span>건
               {selectedRows.size > 0 && (
-                <span className="ml-2 text-primary-600 font-semibold">{selectedRows.size}건 선택됨</span>
+                <span className="ml-1 text-primary-600 font-semibold">· {selectedRows.size}건 선택</span>
               )}
-            </p>
+            </span>
           </div>
-          <div className="flex items-center gap-2">
+
+          {/* 검색: 사건번호/의뢰인/사건명 */}
+          <div className="relative flex-1 min-w-[180px] max-w-[280px]">
+            <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              placeholder="사건번호, 의뢰인, 사건명..."
+              className="w-full pl-7 pr-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-600/20 focus:bg-white"
+            />
+          </div>
+          {/* 담당/보조 검색 */}
+          <div className="w-[160px] sm:w-[180px] shrink-0">
+            <input
+              type="text"
+              value={staffSearch}
+              onChange={(e) => setStaffSearch(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && runSearch()}
+              placeholder="담당 변호사/보조 직원"
+              className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-md focus:outline-none focus:border-primary-400 focus:ring-1 focus:ring-primary-600/20 focus:bg-white"
+            />
+          </div>
+          {/* 검색 / 초기화 */}
+          <Button type="button" size="xs" onClick={runSearch} leftIcon={<Search size={12} />}>
+            검색
+          </Button>
+          <Button type="button" variant="outline" size="xs" onClick={clearSearch}>
+            초기화
+          </Button>
+          {/* 보기 전환: 테이블/카드 */}
+          <div className="flex items-center border border-slate-200 rounded-md overflow-hidden shrink-0">
+            <button
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "px-2 py-1.5 transition-colors",
+                viewMode === "table" ? "bg-primary-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+              )}
+              title="목록 보기"
+            >
+              <List size={14} />
+            </button>
+            <button
+              onClick={() => setViewMode("card")}
+              className={cn(
+                "px-2 py-1.5 transition-colors",
+                viewMode === "card" ? "bg-primary-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
+              )}
+              title="카드 보기"
+            >
+              <LayoutGrid size={14} />
+            </button>
+          </div>
+
+          {/* 필터: 진행상태, 사건종류, 담당 변호사, 법원 */}
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <FilterTray
+              filters={filters}
+              onFilterAdd={(f) => setFilters((prev) => [...prev.filter((p) => p.field !== f.field), f])}
+              onFilterRemove={(field) => setFilters((prev) => prev.filter((f) => f.field !== field))}
+              onFilterClear={() => setFilters([])}
+            />
+          </div>
+
+          {/* 우측: 다운로드, 새로고침, 사건 등록 */}
+          <div className="flex items-center gap-1.5 ml-auto shrink-0">
             {selectedRows.size > 0 && (
-              <Button variant="secondary" size="sm">
+              <Button variant="secondary" size="xs">
                 일괄 처리 ({selectedRows.size})
               </Button>
             )}
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<Download size={13} />}
-              onClick={handleExport}
-            >
+            <Button variant="outline" size="xs" leftIcon={<Download size={12} />} onClick={handleExport}>
               엑셀(CSV) 다운로드
             </Button>
-            <Button variant="outline" size="sm" leftIcon={<RefreshCw size={13} />}>
+            <Button variant="outline" size="xs" leftIcon={<RefreshCw size={12} />}>
               새로고침
             </Button>
             <Link href="/cases/new">
-              <Button size="sm" leftIcon={<Plus size={14} />}>
+              <Button size="xs" leftIcon={<Plus size={12} />}>
                 사건 등록
               </Button>
             </Link>
           </div>
-        </div>
-
-        {/* Search + Filter tray */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative flex-1 min-w-[220px] max-w-sm">
-              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                placeholder="사건번호, 의뢰인, 사건명..."
-                className="w-full pl-8 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 focus:bg-white transition-all"
-              />
-            </div>
-            <div className="relative w-full sm:w-60">
-              <input
-                type="text"
-                value={staffSearch}
-                onChange={(e) => setStaffSearch(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && runSearch()}
-                placeholder="담당 변호사/보조 직원 이름 검색"
-                className="w-full pl-3 pr-3 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 focus:bg-white transition-all"
-              />
-            </div>
-            <Button type="button" size="sm" onClick={runSearch} leftIcon={<Search size={14} />}>
-              검색
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={clearSearch}>
-              초기화
-            </Button>
-            <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-              <button
-                onClick={() => setViewMode("table")}
-                className={cn(
-                  "px-2.5 py-2 transition-colors",
-                  viewMode === "table" ? "bg-primary-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                <List size={15} />
-              </button>
-              <button
-                onClick={() => setViewMode("card")}
-                className={cn(
-                  "px-2.5 py-2 transition-colors",
-                  viewMode === "card" ? "bg-primary-600 text-white" : "bg-white text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                <LayoutGrid size={15} />
-              </button>
-            </div>
-          </div>
-
-          <FilterTray
-            filters={filters}
-            onFilterAdd={(f) => setFilters((prev) => [...prev.filter((p) => p.field !== f.field), f])}
-            onFilterRemove={(field) => setFilters((prev) => prev.filter((f) => f.field !== field))}
-            onFilterClear={() => setFilters([])}
-          />
         </div>
       </div>
 
@@ -483,17 +482,6 @@ export default function CasesPage() {
                         {/* 상태 */}
                         <td className="px-3 py-2.5">
                           <StatusBadge status={c.status} />
-                        </td>
-
-                        {/* 미수금 */}
-                        <td className="px-3 py-2.5">
-                          {c.pendingAmount > 0 ? (
-                            <span className="text-danger-600 font-semibold tabular-nums text-sm">
-                              {formatAmount(c.pendingAmount)}
-                            </span>
-                          ) : (
-                            <span className="text-success-600 text-sm font-medium">완납</span>
-                          )}
                         </td>
                       </motion.tr>
                     );
@@ -885,9 +873,15 @@ function CaseDocumentsPanel({
 
   const openViewerInNewWindow = (file: CaseFile) => {
     try {
-      sessionStorage.setItem("lawygo_viewer_url", file.url);
-      sessionStorage.setItem("lawygo_viewer_name", file.fileName);
-      sessionStorage.setItem("lawygo_viewer_mime", file.mimeType ?? "");
+      // 새 창은 sessionStorage를 공유하지 않으므로 localStorage로 전달
+      localStorage.setItem(
+        "lawygo_viewer",
+        JSON.stringify({
+          url: file.url,
+          fileName: file.fileName,
+          mimeType: file.mimeType ?? "",
+        })
+      );
       window.open("/viewer", "_blank", "noopener,noreferrer,width=900,height=700");
     } catch {
       setPreview(file);

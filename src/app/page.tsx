@@ -82,13 +82,13 @@ export default function DashboardPage() {
           <StatCard title="이번 달 수임료" value={mockDashboardStats.totalMonthlyIncome} icon={<TrendingUp size={16} />} color="green" isAmount change={8} />
         </motion.div>
 
-        {/* Main grid */}
-        <motion.div variants={itemVariants} className="grid grid-cols-12 gap-5">
+        {/* Main grid: 좌/우 세로 맞춤 */}
+        <motion.div variants={itemVariants} className="grid grid-cols-12 gap-5 items-stretch min-h-[420px]">
 
-          {/* My Tasks Table */}
-          <div className="col-span-12 lg:col-span-8">
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
+          {/* My Tasks Table - 우측과 동일 세로 높이로 꽉 채움 */}
+          <div className="col-span-12 lg:col-span-8 flex flex-col min-h-0">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden flex flex-col h-full min-h-0">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-2">
                   <Clock size={15} className="text-primary-600" />
                   <h3 className="text-sm font-semibold text-slate-800">내 담당 사건</h3>
@@ -100,13 +100,13 @@ export default function DashboardPage() {
               </div>
 
               {myTasks.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-12">
+                <div className="flex flex-col items-center justify-center py-12 flex-1">
                   <Coffee size={36} className="text-slate-300 mb-3" />
                   <div className="text-sm font-medium text-slate-600">오늘 예정된 급한 기일이 없습니다.</div>
                   <div className="text-xs text-text-muted mt-1">여유로운 하루 되세요 ☕</div>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="flex-1 min-h-0 overflow-auto">
                   <table className="w-full">
                     <thead>
                       <tr className="bg-slate-50/70 text-xs text-text-muted font-medium">
@@ -169,11 +169,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Right sidebar */}
-          <div className="col-span-12 lg:col-span-4 space-y-4">
-
+          {/* Right sidebar - 우하단과 동일 높이 유지 */}
+          <div className="col-span-12 lg:col-span-4 flex flex-col gap-4 min-h-0">
             {/* Pending Approvals */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden shrink-0">
               <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
                 <div className="flex items-center gap-2">
                   <FileCheck size={14} className="text-warning-500" />
@@ -201,15 +200,15 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* Upcoming deadlines */}
-            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
-              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+            {/* Upcoming deadlines - 남는 세로 공간 채움 */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden flex flex-col flex-1 min-h-0">
+              <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 shrink-0">
                 <div className="flex items-center gap-2">
                   <CalendarDays size={14} className="text-primary-600" />
                   <span className="text-sm font-semibold text-slate-800">다가오는 기일</span>
                 </div>
               </div>
-              <div className="divide-y divide-slate-50">
+              <div className="divide-y divide-slate-50 flex-1 min-h-0 overflow-auto">
                 {upcomingCases.slice(0, 5).map((c) => {
                   const dday = getDDay(c.nextDate!);
                   return (

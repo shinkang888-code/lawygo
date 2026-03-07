@@ -12,8 +12,8 @@ import { cn } from "@/lib/utils";
 const CURRENT_USER: StaffMember = mockStaff[1]; // 이서연
 
 export default function ApprovalDraftPage() {
-  const [firstApprover, setFirstApprover] = useState<StaffMember | null>(null);
-  const [secondApprover, setSecondApprover] = useState<StaffMember | null>(null);
+  const [firstApprovers, setFirstApprovers] = useState<StaffMember[]>([]);
+  const [secondApprovers, setSecondApprovers] = useState<StaffMember[]>([]);
   const [firstSearch, setFirstSearch] = useState("");
   const [secondSearch, setSecondSearch] = useState("");
   const [notes, setNotes] = useState("");
@@ -35,18 +35,34 @@ export default function ApprovalDraftPage() {
             s.role.includes(q.trim())
         );
 
+  const firstIds = useMemo(() => new Set(firstApprovers.map((s) => s.id)), [firstApprovers]);
+  const secondIds = useMemo(() => new Set(secondApprovers.map((s) => s.id)), [secondApprovers]);
+
   const firstFiltered = useMemo(
-    () => filterStaff(staffWithoutSelf, firstSearch),
-    [staffWithoutSelf, firstSearch]
+    () => filterStaff(staffWithoutSelf.filter((s) => !secondIds.has(s.id)), firstSearch),
+    [staffWithoutSelf, secondIds, firstSearch]
   );
   const secondFiltered = useMemo(
-    () =>
-      filterStaff(
-        staffWithoutSelf.filter((s) => s.id !== firstApprover?.id),
-        secondSearch
-      ),
-    [staffWithoutSelf, firstApprover?.id, secondSearch]
+    () => filterStaff(staffWithoutSelf.filter((s) => !firstIds.has(s.id)), secondSearch),
+    [staffWithoutSelf, firstIds, secondSearch]
   );
+
+  const addFirstApprover = (s: StaffMember) => {
+    if (firstIds.has(s.id)) return;
+    setFirstApprovers((prev) => [...prev, s]);
+    setFirstSearch("");
+  };
+  const removeFirstApprover = (staffId: string) => {
+    setFirstApprovers((prev) => prev.filter((x) => x.id !== staffId));
+  };
+  const addSecondApprover = (s: StaffMember) => {
+    if (secondIds.has(s.id)) return;
+    setSecondApprovers((prev) => [...prev, s]);
+    setSecondSearch("");
+  };
+  const removeSecondApprover = (staffId: string) => {
+    setSecondApprovers((prev) => prev.filter((x) => x.id !== staffId));
+  };
 
   const onFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files;
@@ -64,31 +80,31 @@ export default function ApprovalDraftPage() {
   };
 
   const handleSubmit = () => {
-    if (!firstApprover) {
-      toast.error("1차 결재자를 선택하세요.");
+    if (firstApprovers.length === 0) {
+      toast.error("1차 결재자를 1명 이상 선택하세요.");
       return;
     }
-    if (!secondApprover) {
-      toast.error("2차 결재자를 선택하세요.");
+    if (secondApprovers.length === 0) {
+      toast.error("2차 결재자를 1명 이상 선택하세요.");
       return;
     }
     setSubmitting(true);
 
     const approvalLine: ApprovalStep[] = [
-      {
-        order: 1,
-        staffId: firstApprover.id,
-        staffName: firstApprover.name,
-        role: firstApprover.role,
-        status: "대기",
-      },
-      {
-        order: 2,
-        staffId: secondApprover.id,
-        staffName: secondApprover.name,
-        role: secondApprover.role,
-        status: "대기",
-      },
+      ...firstApprovers.map((s) => ({
+        order: 1 as const,
+        staffId: s.id,
+        staffName: s.name,
+        role: s.role,
+        status: "대기" as const,
+      })),
+      ...secondApprovers.map((s) => ({
+        order: 2 as const,
+        staffId: s.id,
+        staffName: s.name,
+        role: s.role,
+        status: "대기" as const,
+      })),
     ];
 
     const newDoc: ApprovalDoc = {
@@ -148,7 +164,7 @@ export default function ApprovalDraftPage() {
               </div>
             </div>
 
-            {/* 1차·2차 결재자 좌우 배치, 직원·변호사 모두 선택 가능 */}
+            {/* 1차·2차 결재자 좌우 배치, 여러 명 선택 가능(칩) */}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1.5">
@@ -161,49 +177,49 @@ export default function ApprovalDraftPage() {
                   placeholder="이름 또는 부서로 검색"
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg mb-2 focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 outline-none"
                 />
-                {firstApprover ? (
-                  <div className="flex items-center justify-between px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
-                    <span className="text-sm font-medium text-slate-800">
-                      {firstApprover.name}
-                      <span className="text-xs text-text-muted ml-1">
-                        {firstApprover.role} · {firstApprover.department}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setFirstApprover(null)}
-                      className="text-slate-400 hover:text-danger-500"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                    {firstFiltered.length === 0 ? (
-                      <div className="px-3 py-4 text-xs text-text-muted text-center">
-                        직원·변호사 중 검색 또는 선택
-                      </div>
-                    ) : (
-                      firstFiltered.map((s) => (
+                {firstApprovers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {firstApprovers.map((s) => (
+                      <span
+                        key={s.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-50 border border-primary-200 rounded-lg text-sm"
+                      >
+                        <span className="font-medium text-slate-800">{s.name}</span>
+                        <span className="text-xs text-text-muted">{s.role}·{s.department}</span>
                         <button
-                          key={s.id}
                           type="button"
-                          onClick={() => {
-                            setFirstApprover(s);
-                            setFirstSearch("");
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                          onClick={() => removeFirstApprover(s.id)}
+                          className="text-slate-400 hover:text-danger-500 p-0.5"
+                          aria-label="제거"
                         >
-                          <User size={14} className="text-slate-400 flex-shrink-0" />
-                          <span className="font-medium text-slate-800">{s.name}</span>
-                          <span className="text-xs text-text-muted">
-                            {s.role} · {s.department}
-                          </span>
+                          <X size={12} />
                         </button>
-                      ))
-                    )}
+                      </span>
+                    ))}
                   </div>
                 )}
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                  {firstFiltered.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-text-muted text-center">
+                      직원·변호사 중 검색 또는 선택 (여러 명 가능)
+                    </div>
+                  ) : (
+                    firstFiltered.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => addFirstApprover(s)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <User size={14} className="text-slate-400 flex-shrink-0" />
+                        <span className="font-medium text-slate-800">{s.name}</span>
+                        <span className="text-xs text-text-muted">
+                          {s.role} · {s.department}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
 
               <div>
@@ -217,49 +233,49 @@ export default function ApprovalDraftPage() {
                   placeholder="이름 또는 부서로 검색"
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg mb-2 focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 outline-none"
                 />
-                {secondApprover ? (
-                  <div className="flex items-center justify-between px-3 py-2 bg-primary-50 border border-primary-200 rounded-lg">
-                    <span className="text-sm font-medium text-slate-800">
-                      {secondApprover.name}
-                      <span className="text-xs text-text-muted ml-1">
-                        {secondApprover.role} · {secondApprover.department}
-                      </span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSecondApprover(null)}
-                      className="text-slate-400 hover:text-danger-500"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                    {secondFiltered.length === 0 ? (
-                      <div className="px-3 py-4 text-xs text-text-muted text-center">
-                        직원·변호사 중 검색 또는 선택
-                      </div>
-                    ) : (
-                      secondFiltered.map((s) => (
+                {secondApprovers.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {secondApprovers.map((s) => (
+                      <span
+                        key={s.id}
+                        className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-50 border border-primary-200 rounded-lg text-sm"
+                      >
+                        <span className="font-medium text-slate-800">{s.name}</span>
+                        <span className="text-xs text-text-muted">{s.role}·{s.department}</span>
                         <button
-                          key={s.id}
                           type="button"
-                          onClick={() => {
-                            setSecondApprover(s);
-                            setSecondSearch("");
-                          }}
-                          className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                          onClick={() => removeSecondApprover(s.id)}
+                          className="text-slate-400 hover:text-danger-500 p-0.5"
+                          aria-label="제거"
                         >
-                          <User size={14} className="text-slate-400 flex-shrink-0" />
-                          <span className="font-medium text-slate-800">{s.name}</span>
-                          <span className="text-xs text-text-muted">
-                            {s.role} · {s.department}
-                          </span>
+                          <X size={12} />
                         </button>
-                      ))
-                    )}
+                      </span>
+                    ))}
                   </div>
                 )}
+                <div className="max-h-32 overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
+                  {secondFiltered.length === 0 ? (
+                    <div className="px-3 py-4 text-xs text-text-muted text-center">
+                      직원·변호사 중 검색 또는 선택 (여러 명 가능)
+                    </div>
+                  ) : (
+                    secondFiltered.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => addSecondApprover(s)}
+                        className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+                      >
+                        <User size={14} className="text-slate-400 flex-shrink-0" />
+                        <span className="font-medium text-slate-800">{s.name}</span>
+                        <span className="text-xs text-text-muted">
+                          {s.role} · {s.department}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
               </div>
             </div>
           </div>

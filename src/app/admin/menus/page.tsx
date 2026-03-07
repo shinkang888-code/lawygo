@@ -205,13 +205,24 @@ export default function AdminMenusPage() {
         </Button>
       </div>
 
+      {source === "db" && items.length > 0 && (
+        <div className="flex items-center gap-3 p-4 rounded-xl bg-success-50 border border-success-200">
+          <Database size={20} className="text-success-600 shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-success-800">DB에 저장된 메뉴를 불러왔습니다.</p>
+            <p className="text-xs text-success-700 mt-0.5">
+              수정·추가·삭제 후 &quot;저장&quot; 버튼을 누르면 Supabase(site_menus)에 반영됩니다.
+            </p>
+          </div>
+        </div>
+      )}
       {source === "default" && items.length > 0 && (
         <div className="flex items-center gap-3 p-4 rounded-xl bg-slate-100 border border-slate-200">
           <AlertCircle size={20} className="text-slate-500 shrink-0" />
           <div>
             <p className="text-sm font-medium text-slate-700">현재 기본 메뉴를 표시 중입니다.</p>
             <p className="text-xs text-slate-600 mt-0.5">
-              수정·추가·삭제 후 위 &quot;저장&quot; 버튼을 누르면 Supabase 테이블(site_menus)에 반영됩니다.
+              수정·추가·삭제 후 위 &quot;저장&quot; 버튼을 누르면 Supabase 테이블(site_menus)에 반영됩니다. DB 연결에 실패하면 기본 메뉴가 표시됩니다.
             </p>
           </div>
         </div>

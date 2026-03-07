@@ -1,9 +1,10 @@
 /**
- * 프론트엔드 메뉴 서비스
+ * 프론트엔드 메뉴 서비스 (서버 전용)
  * - DB(site_menus) 우선, 없으면 menuConfig 기본값 사용
+ * - getSupabaseAdmin() 사용으로 RLS 우회, 로그인 연동과 무관하게 동작
  */
 
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import type { MenuItem } from "@/lib/menuConfig";
 import {
   LNB_MENU,
@@ -52,8 +53,9 @@ export async function getMenusFromDb(): Promise<{
   mobileMain: MenuItem[];
   mobileMore: MenuItem[];
 } | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+  const { data, error } = await db
     .from("site_menus")
     .select("*")
     .order("item_order", { ascending: true });
@@ -92,8 +94,9 @@ export async function getMenusForApp(): Promise<{
 
 /** 관리자용: 타입별 전체 행 (id 포함) */
 export async function getMenuRowsForAdmin(): Promise<SiteMenuRow[] | null> {
-  if (!supabase) return null;
-  const { data, error } = await supabase
+  const db = getSupabaseAdmin();
+  if (!db) return null;
+  const { data, error } = await db
     .from("site_menus")
     .select("*")
     .order("type")

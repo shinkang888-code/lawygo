@@ -51,9 +51,9 @@ export function FilterTray({
   const [openPopover, setOpenPopover] = useState<string | null>(null);
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-1 text-xs text-text-muted">
-        <SlidersHorizontal size={13} />
+    <div className="flex items-center gap-1.5 flex-wrap">
+      <div className="flex items-center gap-0.5 text-[11px] text-text-muted">
+        <SlidersHorizontal size={12} />
         <span>필터:</span>
       </div>
 
@@ -65,7 +65,7 @@ export function FilterTray({
             <button
               onClick={() => setOpenPopover(openPopover === opt.field ? null : opt.field)}
               className={cn(
-                "flex items-center gap-1 text-xs rounded-lg px-2.5 py-1.5 border transition-all",
+                "flex items-center gap-0.5 text-[11px] rounded-md px-2 py-1 border transition-all",
                 activeFilter
                   ? "bg-primary-600 text-white border-primary-600 font-medium"
                   : "bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50"
@@ -77,12 +77,12 @@ export function FilterTray({
                   {String(activeFilter.value)}
                 </span>
               )}
-              <ChevronDown size={11} className={cn("transition-transform", openPopover === opt.field && "rotate-180")} />
+              <ChevronDown size={10} className={cn("transition-transform", openPopover === opt.field && "rotate-180")} />
             </button>
 
             {openPopover === opt.field && (
-              <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-40 min-w-[160px] overflow-hidden animate-fade-up">
-                <div className="py-1">
+              <div className="absolute top-full left-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-xl z-40 min-w-[140px] overflow-hidden animate-fade-up">
+                <div className="py-0.5">
                   {opt.options.map((o) => {
                     const isActive = String(activeFilter?.value) === o;
                     return (
@@ -102,7 +102,7 @@ export function FilterTray({
                           setOpenPopover(null);
                         }}
                         className={cn(
-                          "w-full text-left px-3 py-2 text-sm transition-colors",
+                          "w-full text-left px-2.5 py-1.5 text-xs transition-colors",
                           isActive
                             ? "bg-primary-50 text-primary-700 font-medium"
                             : "text-slate-700 hover:bg-slate-50"
@@ -123,14 +123,14 @@ export function FilterTray({
       {filters.map((f) => (
         <span
           key={f.field}
-          className="inline-flex items-center gap-1 text-xs bg-primary-100 text-primary-700 rounded-full px-2.5 py-1 font-medium"
+          className="inline-flex items-center gap-0.5 text-[11px] bg-primary-100 text-primary-700 rounded-full px-2 py-0.5 font-medium"
         >
           {f.label}
           <button
             onClick={() => onFilterRemove(f.field)}
             className="text-primary-400 hover:text-primary-700 transition-colors"
           >
-            <X size={11} />
+            <X size={10} />
           </button>
         </span>
       ))}
@@ -138,7 +138,7 @@ export function FilterTray({
       {filters.length > 0 && (
         <button
           onClick={onFilterClear}
-          className="text-xs text-danger-600 hover:text-danger-700 font-medium underline"
+          className="text-[11px] text-danger-600 hover:text-danger-700 font-medium underline"
         >
           전체 초기화
         </button>

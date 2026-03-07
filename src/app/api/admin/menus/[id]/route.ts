@@ -1,16 +1,18 @@
 /**
  * 관리자: 메뉴 수정 / 삭제
+ * DB 연동: getSupabaseAdmin() 사용
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import type { MenuType } from "@/lib/menuService";
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PUT(request: NextRequest, { params }: Params) {
-  if (!supabase) {
-    return NextResponse.json({ error: "DB가 연결되지 않았습니다." }, { status: 503 });
+  const db = getSupabaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: "DB가 연결되지 않았습니다. Supabase 환경 변수를 확인하세요." }, { status: 503 });
   }
   const { id } = await params;
   let body: { type?: MenuType; item_id?: string; label?: string; href?: string; icon?: string; item_order?: number; badge?: number; roles?: string[]; lawtop_module?: string };
@@ -32,7 +34,7 @@ export async function PUT(request: NextRequest, { params }: Params) {
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: "수정할 필드가 없습니다." }, { status: 400 });
   }
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("site_menus")
     .update(update)
     .eq("id", id)
@@ -45,11 +47,12 @@ export async function PUT(request: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_request: NextRequest, { params }: Params) {
-  if (!supabase) {
-    return NextResponse.json({ error: "DB가 연결되지 않았습니다." }, { status: 503 });
+  const db = getSupabaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: "DB가 연결되지 않았습니다. Supabase 환경 변수를 확인하세요." }, { status: 503 });
   }
   const { id } = await params;
-  const { error } = await supabase.from("site_menus").delete().eq("id", id);
+  const { error } = await db.from("site_menus").delete().eq("id", id);
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }

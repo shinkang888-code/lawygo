@@ -1,18 +1,27 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
+import { motion } from "framer-motion";
 import {
-  FileCheck, Plus, Check, X, Clock, ChevronRight, GripVertical,
+  FileCheck, Plus, Check, X, Clock, GripVertical,
   FileText, ArrowRight, User, AlertCircle
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 import { mockApprovals, mockStaff } from "@/lib/mockData";
 import { cn, formatDate, formatAmount } from "@/lib/utils";
-import type { ApprovalDoc, ApprovalStep, StaffMember } from "@/lib/types";
+import type { ApprovalDoc, ApprovalStep, StaffMember, Notification } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Avatar } from "@/components/ui/avatar";
 import { toast } from "@/components/ui/toast";
+
+const PENDING_NOTIFICATIONS_KEY = "lawygo:pending-notifications";
+const CURRENT_USER_ID_KEY = "lawygo:userId";
+
+function getCurrentUserId(): string {
+  if (typeof window === "undefined") return "s4";
+  return localStorage.getItem(CURRENT_USER_ID_KEY) || "s4";
+}
 
 const statusConfig = {
   임시저장: { color: "text-slate-500 bg-slate-100", dot: "bg-slate-400" },
@@ -23,11 +32,25 @@ const statusConfig = {
 };
 
 export default function ApprovalPage() {
+  const searchParams = useSearchParams();
+  const docIdFromUrl = searchParams.get("doc");
+
   const [approvals, setApprovals] = useState(mockApprovals);
   const [selected, setSelected] = useState<ApprovalDoc | null>(approvals[0] ?? null);
   const [approvalLine, setApprovalLine] = useState<ApprovalStep[]>(
     approvals[0]?.approvalLine ?? []
   );
+
+  const currentUserId = typeof window !== "undefined" ? getCurrentUserId() : "s4";
+
+  useEffect(() => {
+    if (!docIdFromUrl) return;
+    const doc = approvals.find((a) => a.id === docIdFromUrl);
+    if (doc) {
+      setSelected(doc);
+      setApprovalLine(doc.approvalLine);
+    }
+  }, [docIdFromUrl, approvals]);
 
   useEffect(() => {
     const handler = (e: MessageEvent) => {
@@ -37,7 +60,25 @@ export default function ApprovalPage() {
         setApprovals((prev) => [newDoc, ...prev]);
         setSelected(newDoc);
         setApprovalLine(newDoc.approvalLine);
-        toast.success("새 결재 문서가 추가되었습니다.");
+
+        const notifications: Notification[] = newDoc.approvalLine.map((step, i) => ({
+          id: `n-${newDoc.id}-${step.staffId}-${i}-${Date.now()}`,
+          type: "approval_request",
+          title: "결재 요청",
+          message: `${newDoc.requesterName}님이 "${newDoc.title}" 결재를 요청했습니다.`,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          link: `/approval?doc=${newDoc.id}`,
+          approvalDocId: newDoc.id,
+        }));
+
+        try {
+          const pending = JSON.parse(localStorage.getItem(PENDING_NOTIFICATIONS_KEY) || "[]") as Notification[];
+          localStorage.setItem(PENDING_NOTIFICATIONS_KEY, JSON.stringify([...notifications, ...pending]));
+        } catch {}
+        window.dispatchEvent(new CustomEvent("lawygo:add-notifications", { detail: notifications }));
+
+        toast.success("새 결재 문서가 추가되었습니다. 결재자에게 알림이 발송됩니다.");
       }
     };
     window.addEventListener("message", handler);
@@ -88,11 +129,49 @@ export default function ApprovalPage() {
     );
   };
 
+  const myStep = useMemo(
+    () => selected?.approvalLine.find((s) => s.staffId === currentUserId),
+    [selected, currentUserId]
+  );
+  const canAct = selected?.status === "결재요청" && myStep?.status === "대기";
+
   const handleApprove = () => {
+    if (!selected) return;
+    const now = new Date().toISOString();
+    const nextLine: ApprovalStep[] = selected.approvalLine.map((s) =>
+      s.staffId === currentUserId ? { ...s, status: "승인" as const, signedAt: now } : s
+    );
+    const allApproved = nextLine.every((s) => s.status === "승인");
+    const anyRejected = nextLine.some((s) => s.status === "반려");
+    const nextStatus: ApprovalDoc["status"] = anyRejected ? "반려" : allApproved ? "결재완료" : "결재중";
+
+    const updated: ApprovalDoc = {
+      ...selected,
+      approvalLine: nextLine,
+      status: nextStatus,
+      ...(allApproved || anyRejected ? { completedAt: now } : {}),
+    };
+    setApprovals((prev) => prev.map((d) => (d.id === selected.id ? updated : d)));
+    setSelected(updated);
+    setApprovalLine(updated.approvalLine);
     toast.success("결재를 승인했습니다.");
   };
 
   const handleReject = () => {
+    if (!selected) return;
+    const now = new Date().toISOString();
+    const nextLine: ApprovalStep[] = selected.approvalLine.map((s) =>
+      s.staffId === currentUserId ? { ...s, status: "반려" as const, signedAt: now } : s
+    );
+    const updated: ApprovalDoc = {
+      ...selected,
+      approvalLine: nextLine,
+      status: "반려",
+      completedAt: now,
+    };
+    setApprovals((prev) => prev.map((d) => (d.id === selected.id ? updated : d)));
+    setSelected(updated);
+    setApprovalLine(updated.approvalLine);
     toast.error("결재를 반려했습니다.");
   };
 
@@ -206,8 +285,8 @@ export default function ApprovalPage() {
                 </div>
               )}
 
-              {/* Action buttons */}
-              {selected.status === "결재요청" && (
+              {/* Action buttons: 결재 대기 중이고 내 차례일 때만 승인/반려 표시 */}
+              {canAct && (
                 <div className="flex gap-3 mt-5 pt-5 border-t border-slate-100">
                   <Button
                     variant="success"
@@ -228,6 +307,11 @@ export default function ApprovalPage() {
                     보완 요청
                   </Button>
                 </div>
+              )}
+              {selected.status === "결재요청" && !canAct && myStep?.status !== "대기" && (
+                <p className="text-sm text-text-muted mt-5 pt-5 border-t border-slate-100">
+                  다른 결재자가 처리할 때까지 대기 중입니다.
+                </p>
               )}
             </motion.div>
 

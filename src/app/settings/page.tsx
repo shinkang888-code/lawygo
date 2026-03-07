@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Shield, Database, Palette, ShieldCheck, Sparkles, MessageSquare } from "lucide-react";
+import { Bell, Shield, Database, Palette, ShieldCheck, Sparkles, MessageSquare, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const cards: { href: string; icon: React.ReactNode; title: string; desc: string; action: string; primary?: boolean }[] = [
@@ -53,6 +53,13 @@ const cards: { href: string; icon: React.ReactNode; title: string; desc: string;
     icon: <Shield size={16} className="text-violet-500" />,
     title: "권한 관리",
     desc: "역할별 메뉴 접근 권한과 데이터 접근 범위를 설정합니다.",
+    action: "관리",
+  },
+  {
+    href: "/admin/members",
+    icon: <Users size={16} className="text-slate-600" />,
+    title: "회원 관리",
+    desc: "가입 신청 회원 승인·삭제, 아이디로 일괄 승인·삭제.",
     action: "관리",
   },
 ];

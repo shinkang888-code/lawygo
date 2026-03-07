@@ -17,8 +17,10 @@ import {
   FileStack,
   PenLine,
   Bot,
+  FileCheck,
 } from "lucide-react";
 import { BOARD_LIST, AI_FEATURES } from "@/lib/boardConfig";
+import { ApprovalManagementTab } from "@/components/board/ApprovalManagementTab";
 import { cn } from "@/lib/utils";
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -35,7 +37,10 @@ const aiIconMap: Record<string, React.ReactNode> = {
   ai_search: <Bot size={20} className="text-primary-600" />,
 };
 
+type BoardTab = "boards" | "approval";
+
 export default function BoardListPage() {
+  const [activeTab, setActiveTab] = useState<BoardTab>("boards");
   const [g6Connected, setG6Connected] = useState<boolean | null>(null);
   const [geminiConfigured, setGeminiConfigured] = useState<boolean | null>(null);
 
@@ -67,8 +72,32 @@ export default function BoardListPage() {
               전문 게시판
             </h1>
             <p className="text-sm text-text-muted mt-0.5">
-              그누보드6(G6) 연동 게시판과 AI·문서 엔진(Gemini)을 함께 이용할 수 있습니다.
+              그누보드6(G6) 연동 게시판, AI·문서 엔진(Gemini), 결재관리를 이용할 수 있습니다.
             </p>
+          </div>
+          <div className="flex rounded-lg border border-slate-200 overflow-hidden bg-slate-50">
+            <button
+              type="button"
+              onClick={() => setActiveTab("boards")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium flex items-center gap-2",
+                activeTab === "boards" ? "bg-white text-primary-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              <LayoutList size={16} />
+              게시판·AI
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("approval")}
+              className={cn(
+                "px-4 py-2 text-sm font-medium flex items-center gap-2",
+                activeTab === "approval" ? "bg-white text-primary-600 shadow-sm" : "text-slate-600 hover:bg-slate-100"
+              )}
+            >
+              <FileCheck size={16} />
+              결재관리
+            </button>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {g6Connected !== null && (
@@ -96,6 +125,10 @@ export default function BoardListPage() {
           </div>
         </div>
 
+        {activeTab === "approval" && <ApprovalManagementTab />}
+
+        {activeTab === "boards" && (
+        <>
         {/* G6 게시판 */}
         <section>
           <h2 className="text-sm font-semibold text-slate-600 mb-3">G6 게시판</h2>
@@ -186,6 +219,8 @@ export default function BoardListPage() {
             <code className="bg-white px-1 rounded">GEMINI_API_KEY</code>를 env에 설정하세요.
           </p>
         </div>
+        </>
+        )}
       </motion.div>
     </div>
   );

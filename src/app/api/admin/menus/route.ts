@@ -1,9 +1,10 @@
 /**
  * 관리자: 메뉴 목록 조회 / 메뉴 추가
+ * DB 연동: getSupabaseAdmin() 사용 (service role, RLS 우회)
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import { getMenuRowsForAdmin } from "@/lib/menuService";
 import {
   LNB_MENU,
@@ -33,8 +34,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: "DB가 연결되지 않았습니다." }, { status: 503 });
+  const db = getSupabaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: "DB가 연결되지 않았습니다. Supabase 환경 변수를 확인하세요." }, { status: 503 });
   }
   let body: { type: MenuType; item_id: string; label: string; href: string; icon: string; item_order?: number; badge?: number; roles?: string[]; lawtop_module?: string };
   try {
@@ -47,7 +49,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "type, item_id, label, href, icon 은 필수입니다." }, { status: 400 });
   }
   const order = typeof item_order === "number" ? item_order : 999;
-  const { data, error } = await supabase
+  const { data, error } = await db
     .from("site_menus")
     .insert({
       type,
@@ -70,8 +72,9 @@ export async function POST(request: NextRequest) {
 
 /** 전체 메뉴 일괄 저장: 기존 삭제 후 현재 목록 전부 INSERT */
 export async function PUT(request: NextRequest) {
-  if (!supabase) {
-    return NextResponse.json({ error: "DB가 연결되지 않았습니다." }, { status: 503 });
+  const db = getSupabaseAdmin();
+  if (!db) {
+    return NextResponse.json({ error: "DB가 연결되지 않았습니다. Supabase 환경 변수를 확인하세요." }, { status: 503 });
   }
   let body: { data: { type: MenuType; item_order: number; item_id: string; label: string; href: string; icon: string; badge?: number | null; roles?: string[] | null; lawtop_module?: string | null }[] };
   try {
@@ -89,9 +92,9 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  const { data: existing } = await supabase.from("site_menus").select("id");
+  const { data: existing } = await db.from("site_menus").select("id");
   if (existing && existing.length > 0) {
-    const { error: delError } = await supabase.from("site_menus").delete().in("id", existing.map((r) => r.id));
+    const { error: delError } = await db.from("site_menus").delete().in("id", existing.map((r) => r.id));
     if (delError) {
       return NextResponse.json({ error: delError.message }, { status: 400 });
     }
@@ -113,7 +116,7 @@ export async function PUT(request: NextRequest) {
     lawtop_module: row.lawtop_module ?? null,
   }));
 
-  const { data: inserted, error: insertError } = await supabase
+  const { data: inserted, error: insertError } = await db
     .from("site_menus")
     .insert(inserts)
     .select();

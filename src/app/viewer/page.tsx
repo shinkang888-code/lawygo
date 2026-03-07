@@ -3,9 +3,7 @@
 import { useEffect, useState } from "react";
 import { FileText, X } from "lucide-react";
 
-const STORAGE_KEY_URL = "lawygo_viewer_url";
-const STORAGE_KEY_NAME = "lawygo_viewer_name";
-const STORAGE_KEY_MIME = "lawygo_viewer_mime";
+const STORAGE_KEY = "lawygo_viewer";
 
 export default function ViewerPage() {
   const [url, setUrl] = useState<string | null>(null);
@@ -14,18 +12,27 @@ export default function ViewerPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const u = sessionStorage.getItem(STORAGE_KEY_URL);
-    const n = sessionStorage.getItem(STORAGE_KEY_NAME) ?? "";
-    const m = sessionStorage.getItem(STORAGE_KEY_MIME) ?? "";
-    setUrl(u);
-    setFileName(n);
-    setMimeType(m);
-    sessionStorage.removeItem(STORAGE_KEY_URL);
-    sessionStorage.removeItem(STORAGE_KEY_NAME);
-    sessionStorage.removeItem(STORAGE_KEY_MIME);
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const payload = JSON.parse(raw) as { url?: string; fileName?: string; mimeType?: string };
+        if (payload.url) {
+          setUrl(payload.url);
+          setFileName(payload.fileName ?? "");
+          setMimeType(payload.mimeType ?? "");
+        }
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
   }, []);
 
-  const canPreview = url && (mimeType.includes("pdf") || mimeType.startsWith("image/"));
+  const canPreview =
+    url &&
+    (mimeType.includes("pdf") ||
+      mimeType.startsWith("image/") ||
+      mimeType.startsWith("text/"));
 
   const close = () => window.close();
 
@@ -75,6 +82,13 @@ export default function ViewerPage() {
                 src={url}
                 alt={fileName}
                 className="max-w-full max-h-full object-contain mx-auto"
+              />
+            ) : mimeType.startsWith("text/") ? (
+              <iframe
+                src={url}
+                title={fileName}
+                className="w-full flex-1 min-h-[480px] border-0"
+                sandbox="allow-same-origin"
               />
             ) : (
               <iframe
