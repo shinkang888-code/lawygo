@@ -28,7 +28,22 @@ export async function POST(request: NextRequest) {
 
   const db = getSupabaseAdmin();
   if (!db) {
-    return NextResponse.json({ error: "서버 설정 오류입니다." }, { status: 503 });
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const hint = !url && !key
+      ? " .env.local에 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY를 넣은 뒤 개발 서버를 재시작하세요."
+      : !url
+        ? " NEXT_PUBLIC_SUPABASE_URL을 확인하고 서버를 재시작하세요."
+        : !key
+          ? " SUPABASE_SERVICE_ROLE_KEY를 확인하고 서버를 재시작하세요."
+          : " 서버를 재시작한 뒤 다시 시도하세요.";
+    return NextResponse.json(
+      {
+        error: "DB가 연결되지 않았습니다." + hint,
+        code: "DB_NOT_CONFIGURED",
+      },
+      { status: 503 }
+    );
   }
 
   const { data: user, error } = await db

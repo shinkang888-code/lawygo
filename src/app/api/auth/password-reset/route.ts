@@ -31,7 +31,13 @@ export async function POST(request: NextRequest) {
 
   const db = getSupabaseAdmin();
   if (!db) {
-    return NextResponse.json({ error: "서버 설정 오류입니다." }, { status: 503 });
+    return NextResponse.json(
+      {
+        error: "DB가 연결되지 않았습니다. NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY를 설정하세요.",
+        code: "DB_NOT_CONFIGURED",
+      },
+      { status: 503 }
+    );
   }
 
   const { data: user, error: fetchError } = await db

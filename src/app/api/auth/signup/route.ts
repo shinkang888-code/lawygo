@@ -35,7 +35,13 @@ export async function POST(request: NextRequest) {
 
   const db = getSupabaseAdmin();
   if (!db) {
-    return NextResponse.json({ error: "서버 설정 오류입니다." }, { status: 503 });
+    return NextResponse.json(
+      {
+        error: "DB가 연결되지 않았습니다. .env.local(또는 Vercel 환경 변수)에 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY를 설정하고, Supabase에 site_users 테이블을 생성한 뒤 서버를 재시작하세요.",
+        code: "DB_NOT_CONFIGURED",
+      },
+      { status: 503 }
+    );
   }
 
   const { data: existing } = await db.from("site_users").select("id").eq("login_id", loginId).single();

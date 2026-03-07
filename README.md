@@ -89,7 +89,13 @@ src/
    - **권장(관리자 기능)**: `SUPABASE_SERVICE_ROLE_KEY` — 같은 화면에서 service_role 키 (비공개 유지)
    - **선택(클라이언트 로그인 등)**: `NEXT_PUBLIC_SUPABASE_ANON_KEY` — anon public 키
 2. 예시는 `.env.example` 참고. (`cp .env.example .env.local` 후 값만 채우면 됨)
-3. `app_settings` 테이블이 없으면 Supabase에 마이그레이션 적용: `supabase/migrations/20260307100000_app_settings.sql`
+3. **로그인/회원가입**을 쓰려면 Supabase에 `site_users` 테이블 생성: `supabase/migrations/20260307200000_site_users.sql` 내용을 SQL Editor에서 실행.
+4. `app_settings` 테이블이 없으면: `supabase/migrations/20260307100000_app_settings.sql` 실행.
+5. **Vercel 배포 시**: 프로젝트 설정 → Environment Variables에 위 변수 추가 후 재배포.
+
+**관리자 계정(shinkang) 생성**: DB 연동 후 최초 1회, 터미널에서  
+`ADMIN_INITIAL_PASSWORD=원하는비밀번호 npm run seed-admin`  
+실행 시 로그인 ID `shinkang`, 지정한 비밀번호, 관리번호 `00000`(또는 `ADMIN_MANAGEMENT_NUMBER` 환경 변수)인 승인된 관리자 계정이 생성됩니다.
 
 ## 🔧 프론트엔드 관리자
 
