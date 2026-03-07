@@ -29,14 +29,14 @@ export async function POST() {
 
   let { data: user, error } = await db
     .from("site_users")
-    .select("id, login_id, name, role")
+    .select("id, login_id, name")
     .eq("login_id", DEMO_LOGIN_ID)
     .eq("status", "approved")
     .maybeSingle();
 
   if (error) {
     return NextResponse.json(
-      { error: "데모 계정 조회 중 오류가 발생했습니다." },
+      { error: "데모 계정 조회 중 오류가 발생했습니다. Supabase에 site_users 테이블이 있는지 확인해 주세요." },
       { status: 500 }
     );
   }
@@ -54,7 +54,7 @@ export async function POST() {
         approved_at: new Date().toISOString(),
         approved_by: "demo",
       })
-      .select("id, login_id, name, role")
+      .select("id, login_id, name")
       .single();
 
     if (insertError) {
@@ -67,7 +67,7 @@ export async function POST() {
             approved_by: "demo",
           })
           .eq("login_id", DEMO_LOGIN_ID)
-          .select("id, login_id, name, role")
+          .select("id, login_id, name")
           .maybeSingle();
         if (updated) user = updated;
       }
@@ -86,12 +86,12 @@ export async function POST() {
     userId: user.id,
     loginId: user.login_id,
     name: user.name ?? user.login_id,
-    role: user.role ?? undefined,
+    role: (user as { role?: string }).role ?? undefined,
   });
 
   const res = NextResponse.json({
     success: true,
-    user: { id: user.id, loginId: user.login_id, name: user.name, role: user.role },
+    user: { id: user.id, loginId: user.login_id, name: user.name },
   });
   res.headers.set("Set-Cookie", cookie);
   return res;
