@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn, UserPlus, KeyRound, Settings2 } from "lucide-react";
+import { LogIn, UserPlus, KeyRound, Settings2, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,29 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [managementNumber, setManagementNumber] = useState("");
   const [loading, setLoading] = useState(false);
+  const [demoLoading, setDemoLoading] = useState(false);
+
+  const handleDemoLogin = async () => {
+    setDemoLoading(true);
+    try {
+      const res = await fetch("/api/auth/demo", {
+        method: "POST",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data.error ?? "데모 로그인에 실패했습니다.");
+        return;
+      }
+      toast.success("데모 계정으로 로그인되었습니다.");
+      router.push("/");
+      router.refresh();
+    } catch {
+      toast.error("데모 로그인 요청 중 오류가 발생했습니다.");
+    } finally {
+      setDemoLoading(false);
+    }
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -127,6 +150,23 @@ export default function LoginPage() {
               비밀번호 확인
             </Button>
           </Link>
+        </div>
+
+        <div className="mt-4 pt-4 border-t border-slate-100">
+          <Button
+            type="button"
+            variant="secondary"
+            className="w-full"
+            leftIcon={<Play size={16} />}
+            disabled={demoLoading}
+            loading={demoLoading}
+            onClick={handleDemoLogin}
+          >
+            DEMO
+          </Button>
+          <p className="text-center text-xs text-slate-500 mt-2">
+            관리자 권한으로 체험 로그인
+          </p>
         </div>
       </div>
 
