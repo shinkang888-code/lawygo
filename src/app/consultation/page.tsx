@@ -92,10 +92,14 @@ export default function ConsultationPage() {
   const handleSaveConsultation = (payload: Partial<ConsultationItem>) => {
     const consultants = payload.consultants?.length ? payload.consultants : (payload.consultantId ? [{ id: payload.consultantId, name: payload.consultantName ?? "" }] : undefined);
     const clientNames = payload.clientNames?.length ? payload.clientNames : (payload.clientName ? [payload.clientName] : undefined);
-    const normalized = { ...payload, consultants, clientNames, consultantId: consultants?.[0]?.id ?? payload.consultantId, consultantName: consultants?.[0]?.name ?? payload.consultantName, clientName: clientNames?.[0] ?? payload.clientName };
+    const normalized = { ...payload, consultants, clientNames, consultantId: consultants?.[0]?.id ?? payload.consultantId ?? "", consultantName: consultants?.[0]?.name ?? payload.consultantName ?? "", clientName: clientNames?.[0] ?? payload.clientName ?? "" };
     if (editing) {
       setConsultations((prev) =>
-        prev.map((c) => (c.id === editing.id ? { ...c, ...normalized, updatedAt: new Date().toISOString() } : c))
+        prev.map((c) =>
+          c.id === editing.id
+            ? { ...c, ...normalized, updatedAt: new Date().toISOString(), consultantId: normalized.consultantId ?? c.consultantId, consultantName: normalized.consultantName ?? c.consultantName, clientName: normalized.clientName ?? c.clientName }
+            : c
+        )
       );
       toast.success("상담이 수정되었습니다.");
     } else {

@@ -1,13 +1,20 @@
 /**
  * Gemini AI API 브릿지
- * env: GOOGLE_GEMINI_API_KEY 또는 GEMINI_API_KEY
+ * env 우선, 없으면 시스템 설정 > AI 연동관리(DB)에서 읽음
  */
 
 import { NextResponse } from "next/server";
 import { AI_FEATURES } from "@/lib/boardConfig";
+import { getAppSetting } from "@/lib/appSettingsServer";
 
-const GEMINI_API_KEY = process.env.GOOGLE_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
 const MODEL = "gemini-1.5-flash";
+
+async function getGeminiApiKey(): Promise<string> {
+  const envKey = process.env.GOOGLE_GEMINI_API_KEY ?? process.env.GEMINI_API_KEY ?? "";
+  if (envKey) return envKey;
+  const stored = await getAppSetting<{ geminiApiKey?: string }>("ai_settings");
+  return (stored?.geminiApiKey ?? "").trim();
+}
 
 const SYSTEM_HINTS: Record<string, string> = {
   case_search: "당신은 대한민국 판례 검색·요약 전문가입니다. 질문에 맞는 판례 검색 방법, 요건, 관련 판례 요약을 답변하세요.",
@@ -18,9 +25,10 @@ const SYSTEM_HINTS: Record<string, string> = {
 };
 
 export async function POST(req: Request) {
+  const GEMINI_API_KEY = await getGeminiApiKey();
   if (!GEMINI_API_KEY) {
     return NextResponse.json(
-      { error: "Gemini API 키가 설정되지 않았습니다. GOOGLE_GEMINI_API_KEY 또는 GEMINI_API_KEY를 env에 설정하세요." },
+      { error: "Gemini API 키가 설정되지 않았습니다. 시스템 설정 > AI 연동관리에서 API 키를 입력하세요." },
       { status: 503 }
     );
   }
@@ -76,8 +84,9 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
+  const key = await getGeminiApiKey();
   return NextResponse.json({
-    configured: !!GEMINI_API_KEY,
+    configured: !!key,
     features: AI_FEATURES.map((f) => ({ id: f.id, name: f.name })),
   });
 }

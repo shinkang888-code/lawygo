@@ -21,6 +21,7 @@ import {
   Upload,
   Pencil,
   ExternalLink,
+  GripVertical,
 } from "lucide-react";
 import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
 import { mockCases, mockTimeline } from "@/lib/mockData";
@@ -1069,7 +1070,7 @@ function CaseDocumentsPanel({
             )}
           >
             <span className="text-slate-600">
-              파일을 끌어다 놓거나 버튼으로 추가하세요.
+              파일을 끌어다 놓거나 버튼으로 추가하세요. <span className="text-primary-600 font-medium">파일 행을 좌측 폴더로 드래그하면 이동됩니다.</span>
             </span>
             {canEdit && (
               <label className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-xs cursor-pointer hover:bg-slate-50">
@@ -1106,8 +1107,8 @@ function CaseDocumentsPanel({
                     className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer"
                     onDoubleClick={() => openViewerInNewWindow(file)}
                   >
-                    <td className="px-3 py-1.5 align-top">
-                      <FileIcon size={14} className="text-slate-400" />
+                    <td className="px-3 py-1.5 align-top text-slate-400" title="드래그하여 폴더로 이동">
+                      <GripVertical size={14} className="cursor-grab active:cursor-grabbing" />
                     </td>
                     <td className="px-3 py-1.5 text-slate-800">
                       {editingFileId === file.id ? (

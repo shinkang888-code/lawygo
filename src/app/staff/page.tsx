@@ -20,10 +20,23 @@ export default function StaffPage() {
         setStaffList((prev) => [...added, ...prev]);
         toast.success(`${added.length}명이 추가되었습니다.`);
       }
+      if (e.data?.type === "STAFF_EDIT_GET_DATA" && e.source) {
+        (e.source as Window).postMessage({ type: "STAFF_DATA", payload: staffList }, window.location.origin);
+      }
+      if (e.data?.type === "STAFF_UPDATE" && e.data?.payload) {
+        const updated = e.data.payload as StaffMember;
+        setStaffList((prev) => prev.map((s) => (s.id === updated.id ? updated : s)));
+        toast.success("직원 정보가 수정되었습니다.");
+      }
+      if (e.data?.type === "STAFF_DELETE" && e.data?.payload) {
+        const id = e.data.payload as string;
+        setStaffList((prev) => prev.filter((s) => s.id !== id));
+        toast.success("직원이 삭제되었습니다.");
+      }
     };
     window.addEventListener("message", handler);
     return () => window.removeEventListener("message", handler);
-  }, []);
+  }, [staffList]);
 
   const openAddWindow = () => {
     const w = 520;
@@ -33,6 +46,18 @@ export default function StaffPage() {
     window.open(
       "/staff/add",
       "staff-add",
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+  };
+
+  const openEditWindow = (staffId: string) => {
+    const w = 520;
+    const h = 640;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(
+      `/staff/edit?id=${encodeURIComponent(staffId)}`,
+      "staff-edit",
       `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
     );
   };
@@ -63,7 +88,9 @@ export default function StaffPage() {
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.05 }}
+            onDoubleClick={() => openEditWindow(staff.id)}
             className="bg-white rounded-2xl border border-slate-200 shadow-card p-5 hover:shadow-card-hover transition-all hover:-translate-y-0.5 cursor-pointer"
+            title="더블클릭 시 직원 정보 편집"
           >
             <div className="flex items-start gap-4">
               <Avatar name={staff.name} size="lg" />

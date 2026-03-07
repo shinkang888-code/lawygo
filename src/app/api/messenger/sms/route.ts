@@ -1,21 +1,33 @@
 /**
  * 문자 발송 (알리고 API)
  * POST body: { receivers: string[], message: string }
- * env: ALIGO_KEY, ALIGO_USER_ID, ALIGO_SENDER
+ * env 우선, 없으면 시스템 설정 > 메신저 연동관리(DB)에서 읽음
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAppSetting } from "@/lib/appSettingsServer";
 
 const ALIGO_SEND_URL = "https://apis.aligo.in/send/";
 
+async function getAligoConfig(): Promise<{ key: string; userId: string; sender: string }> {
+  const key = process.env.ALIGO_KEY ?? process.env.ALIGO_API_KEY ?? "";
+  const userId = process.env.ALIGO_USER_ID ?? "";
+  const sender = process.env.ALIGO_SENDER ?? "";
+  if (key && userId && sender) return { key, userId, sender };
+  const stored = await getAppSetting<{ aligoKey?: string; aligoUserId?: string; aligoSender?: string }>("messenger_settings");
+  return {
+    key: stored?.aligoKey ?? key,
+    userId: stored?.aligoUserId ?? userId,
+    sender: stored?.aligoSender ?? sender,
+  };
+}
+
 export async function POST(request: NextRequest) {
-  const key = process.env.ALIGO_KEY ?? process.env.ALIGO_API_KEY;
-  const userId = process.env.ALIGO_USER_ID;
-  const sender = process.env.ALIGO_SENDER;
+  const { key, userId, sender } = await getAligoConfig();
 
   if (!key || !userId || !sender) {
     return NextResponse.json(
-      { error: "알리고 연동이 설정되지 않았습니다. ALIGO_KEY, ALIGO_USER_ID, ALIGO_SENDER 환경 변수를 설정하세요." },
+      { error: "알리고 연동이 설정되지 않았습니다. 시스템 설정 > 메신저 연동관리에서 알리고 API 키·User ID·발신번호를 입력하세요." },
       { status: 503 }
     );
   }

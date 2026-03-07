@@ -1,22 +1,33 @@
 /**
  * 카카오톡 발송 (카카오 비즈 메시지 알림톡 API)
  * POST body: { receivers: string[], message: string }
- * env: KAKAO_BIZ_ACCESS_TOKEN(또는 발급 API 연동), KAKAO_BIZ_SENDER_KEY, KAKAO_BIZ_TEMPLATE_CODE 등
- * - 알림톡은 템플릿 승인 후 사용. 자유 문구 발송은 친구톡/다른 채널 필요.
+ * env 우선, 없으면 시스템 설정 > 메신저 연동관리(DB)에서 읽음
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getAppSetting } from "@/lib/appSettingsServer";
+
+async function getKakaoConfig(): Promise<{ accessToken: string; senderKey: string; templateCode?: string }> {
+  const accessToken = process.env.KAKAO_BIZ_ACCESS_TOKEN ?? "";
+  const senderKey = process.env.KAKAO_BIZ_SENDER_KEY ?? "";
+  const templateCode = process.env.KAKAO_BIZ_TEMPLATE_CODE;
+  if (accessToken && senderKey) return { accessToken, senderKey, templateCode };
+  const stored = await getAppSetting<{ kakaoBizAccessToken?: string; kakaoSenderKey?: string }>("messenger_settings");
+  return {
+    accessToken: stored?.kakaoBizAccessToken ?? accessToken,
+    senderKey: stored?.kakaoSenderKey ?? senderKey,
+    templateCode,
+  };
+}
 
 export async function POST(request: NextRequest) {
-  const accessToken = process.env.KAKAO_BIZ_ACCESS_TOKEN;
-  const senderKey = process.env.KAKAO_BIZ_SENDER_KEY;
-  const templateCode = process.env.KAKAO_BIZ_TEMPLATE_CODE;
+  const { accessToken, senderKey, templateCode } = await getKakaoConfig();
 
   if (!accessToken || !senderKey) {
     return NextResponse.json(
       {
         error:
-          "카카오톡 연동이 설정되지 않았습니다. KAKAO_BIZ_ACCESS_TOKEN, KAKAO_BIZ_SENDER_KEY 환경 변수와 " +
+          "카카오톡 연동이 설정되지 않았습니다. 시스템 설정 > 메신저 연동관리에서 카카오 비즈 액세스 토큰·발신 키를 입력하세요. " +
           "카카오 비즈니스 채널·알림톡 템플릿 등록이 필요합니다.",
       },
       { status: 503 }

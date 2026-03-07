@@ -1,0 +1,109 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import Link from "next/link";
+import { ArrowLeft, Sparkles, Save } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { toast } from "@/components/ui/toast";
+
+const SETTINGS_KEY = "ai_settings";
+
+interface AiSettings {
+  geminiApiKey: string;
+}
+
+const defaults: AiSettings = {
+  geminiApiKey: "",
+};
+
+export default function AdminSettingsAiPage() {
+  const [form, setForm] = useState<AiSettings>(defaults);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/settings");
+        const data = await res.json();
+        if (data[SETTINGS_KEY]) {
+          const s = data[SETTINGS_KEY] as Partial<AiSettings>;
+          setForm((prev) => ({ ...prev, ...s }));
+        }
+      } catch {
+        // ignore
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [SETTINGS_KEY]: form }),
+      });
+      if (!res.ok) throw new Error((await res.json()).error);
+      toast.success("AI 연동 설정이 저장되었습니다. 전문 게시판 AI 기능을 사용할 수 있습니다.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "저장에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-12 text-text-muted">
+        불러오는 중...
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Link href="/settings" className="p-2 rounded-lg hover:bg-slate-100 text-slate-600" aria-label="설정 목록으로">
+          <ArrowLeft size={20} />
+        </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <Sparkles size={26} className="text-primary-500" />
+            AI 연동관리
+          </h1>
+          <p className="text-sm text-text-muted mt-0.5">
+            Gemini API 키를 입력하면 전문 게시판의 판례검색, 법률검색, AI 문서요약·서면작성 등이 동작합니다.
+          </p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-6 space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Google Gemini API Key *</label>
+          <input
+            type="password"
+            value={form.geminiApiKey}
+            onChange={(e) => setForm((p) => ({ ...p, geminiApiKey: e.target.value }))}
+            placeholder="AIzaSy..."
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+            autoComplete="off"
+          />
+          <p className="text-xs text-text-muted mt-1">
+            <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
+              Google AI Studio
+            </a>
+            에서 API 키를 발급받을 수 있습니다. 저장 후 전문 게시판 → AI·문서 엔진에서 바로 사용됩니다.
+          </p>
+        </div>
+        <div className="pt-2">
+          <Button onClick={handleSave} disabled={saving} leftIcon={<Save size={16} />}>
+            저장
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
