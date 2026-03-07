@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn, UserPlus, KeyRound } from "lucide-react";
+import { LogIn, UserPlus, KeyRound, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
@@ -111,7 +111,12 @@ export default function LoginPage() {
           </Button>
         </form>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2 justify-center">
+        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2 justify-center flex-wrap">
+          <Link href="/login/setup-env">
+            <Button type="button" variant="outline" size="sm" leftIcon={<Settings2 size={14} />} className="w-full sm:w-auto">
+              Supabase 키 설정
+            </Button>
+          </Link>
           <Link href="/login/signup">
             <Button type="button" variant="outline" size="sm" leftIcon={<UserPlus size={14} />} className="w-full sm:w-auto">
               회원가입

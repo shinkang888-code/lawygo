@@ -44,12 +44,33 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const { data: existing } = await db.from("site_users").select("id").eq("login_id", loginId).single();
+  const { data: existing, error: existingError } = await db
+    .from("site_users")
+    .select("id")
+    .eq("login_id", loginId)
+    .maybeSingle();
+
+  if (existingError) {
+    console.error("signup existing check:", existingError);
+    const msg =
+      process.env.NODE_ENV === "development"
+        ? `DB 조회 오류: ${existingError.message}. site_users 테이블이 있는지 Supabase SQL Editor에서 확인하세요.`
+        : "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+    return NextResponse.json({ error: msg }, { status: 503 });
+  }
   if (existing) {
     return NextResponse.json({ error: "이미 사용 중인 아이디입니다." }, { status: 409 });
   }
 
-  const { count } = await db.from("site_users").select("id", { count: "exact", head: true });
+  const { count, error: countError } = await db.from("site_users").select("id", { count: "exact", head: true });
+  if (countError) {
+    console.error("signup count:", countError);
+    const msg =
+      process.env.NODE_ENV === "development"
+        ? `DB 조회 오류: ${countError.message}. site_users 테이블을 생성했는지 확인하세요.`
+        : "일시적인 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.";
+    return NextResponse.json({ error: msg }, { status: 503 });
+  }
   const isFirstUser = (count ?? 0) === 0;
 
   const password_hash = hashPassword(password);
@@ -68,7 +89,27 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     console.error("signup insert error:", error);
-    return NextResponse.json({ error: "회원가입 처리에 실패했습니다." }, { status: 500 });
+    const code = error.code ?? "";
+    const hint =
+      process.env.NODE_ENV === "development"
+        ? ` (${code}: ${error.message})`
+        : "";
+    if (code === "42P01" || error.message?.includes("does not exist")) {
+      return NextResponse.json(
+        {
+          error:
+            "site_users 테이블이 없습니다. Supabase 대시보드 → SQL Editor에서 supabase/migrations/20260307200000_site_users.sql 내용을 실행한 뒤 다시 시도하세요." + hint,
+        },
+        { status: 503 }
+      );
+    }
+    if (code === "23505") {
+      return NextResponse.json({ error: "이미 사용 중인 아이디입니다." }, { status: 409 });
+    }
+    return NextResponse.json(
+      { error: "회원가입 처리에 실패했습니다." + hint },
+      { status: 500 }
+    );
   }
 
   return NextResponse.json({

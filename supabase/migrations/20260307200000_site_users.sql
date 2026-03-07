@@ -1,6 +1,8 @@
 -- 로그인 연동 회원 (관리자 승인 후 정식 회원)
 -- Supabase 대시보드 → SQL Editor에서 실행 가능
 
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
 CREATE TABLE IF NOT EXISTS public.site_users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   login_id TEXT NOT NULL UNIQUE,
