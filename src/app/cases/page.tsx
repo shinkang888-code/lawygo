@@ -13,6 +13,8 @@ import {
   ChevronUp,
   ChevronDown,
   ChevronsUpDown,
+  ChevronLeft,
+  ChevronRight,
   MessageSquare,
   FileIcon,
   Eye,
@@ -47,7 +49,32 @@ import { CaseRowSkeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { toast } from "@/components/ui/toast";
 
-import { loadCourtOverrides, saveCourtOverrides } from "@/lib/caseCourtOverrides";
+import { applyOverrides } from "@/lib/caseOverridesStorage";
+import {
+  getPermanentDeletedIds,
+  getSoftDeletedIds,
+  getSoftDeletedAt,
+  softDeleteCases,
+  permanentDeleteCases,
+} from "@/lib/caseDeleteStorage";
+import { appendCaseHistory } from "@/lib/caseHistoryStorage";
+import { History } from "lucide-react";
+
+function getCurrentAccount(): string {
+  if (typeof window === "undefined") return "관리자";
+  try {
+    const cookie = document.cookie.split(";").find((c) => c.trim().startsWith("lawygo_session="));
+    if (!cookie) return "관리자";
+    const payload = cookie.split("=")[1]?.split(".")[0];
+    if (!payload) return "관리자";
+    const decoded = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/")));
+    return decoded.name ?? decoded.loginId ?? "관리자";
+  } catch {
+    return "관리자";
+  }
+}
+
+const PAGE_SIZE = 10;
 
 const columns: { key: keyof CaseItem; label: string; width?: string; sortable?: boolean }[] = [
   { key: "caseNumber", label: "사건번호", width: "140px", sortable: true },
@@ -84,6 +111,8 @@ export default function CasesPage() {
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
   const [isLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [listRefreshKey, setListRefreshKey] = useState(0);
 
   // 사건별 메모/자료실 데이터 (localStorage 연동)
   const [caseMemos, setCaseMemos] = useState<Record<string, Timeline[]>>(() =>
@@ -93,16 +122,6 @@ export default function CasesPage() {
     loadCaseFiles(getInitialFilesFromMock(mockTimeline))
   );
   const [caseFolders, setCaseFolders] = useState<Record<string, CaseFolder[]>>(loadCaseFolders);
-  const [courtOverrides, setCourtOverrides] = useState<Record<string, string>>(loadCourtOverrides);
-
-  const updateCourt = (caseId: string, value: string) => {
-    setCourtOverrides((prev) => {
-      const next = value.trim() ? { ...prev, [caseId]: value.trim() } : (() => { const u = { ...prev }; delete u[caseId]; return u; })();
-      saveCourtOverrides(next);
-      return next;
-    });
-  };
-
   const updateMemos = (caseId: string, memos: Timeline[]) => {
     setCaseMemos((prev) => {
       const next = { ...prev, [caseId]: memos };
@@ -138,11 +157,12 @@ export default function CasesPage() {
   };
 
   const filtered = useMemo(() => {
-    const withCourt = mockCases.map((c) => ({
-      ...c,
-      court: courtOverrides[c.id] ?? c.court,
-    }));
-    let result = [...withCourt];
+    const permDeleted = getPermanentDeletedIds();
+    const withOverrides = mockCases
+      .filter((c) => !permDeleted.has(c.id))
+      .map((c) => applyOverrides(c));
+    let result = [...withOverrides];
+    void listRefreshKey;
 
     if (appliedSearch.trim()) {
       const q = appliedSearch.trim().toLowerCase();
@@ -181,7 +201,92 @@ export default function CasesPage() {
     });
 
     return result;
-  }, [appliedSearch, appliedStaffSearch, filters, sort, courtOverrides]);
+  }, [appliedSearch, appliedStaffSearch, filters, sort, listRefreshKey]);
+
+  useEffect(() => {
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "case-edited") setListRefreshKey((k) => k + 1);
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
+
+  const openEditPopup = () => {
+    const ids = [...selectedRows];
+    if (ids.length !== 1) {
+      toast.error("편집할 사건을 1건 선택하세요.");
+      return;
+    }
+    const w = 640;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(`/cases/${ids[0]}/edit`, "case-edit", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+  };
+
+  const handleCaseDelete = () => {
+    const ids = [...selectedRows];
+    if (ids.length === 0) {
+      toast.error("삭제할 사건을 선택하세요.");
+      return;
+    }
+    const softIds = getSoftDeletedIds();
+    const selectedSoft = ids.filter((id) => softIds.includes(id));
+    if (selectedSoft.length > 0) {
+      if (!confirm("선택한 사건 중 이미 삭제 대기 상태인 건을 영구 삭제하시겠습니까?")) return;
+      permanentDeleteCases(selectedSoft);
+      selectedSoft.forEach((caseId) => {
+        const c = filtered.find((x) => x.id === caseId);
+        if (c) {
+          appendCaseHistory({
+            caseId,
+            caseNumber: c.caseNumber,
+            clientName: c.clientName,
+            action: "영구삭제",
+            accountName: getCurrentAccount(),
+            timestamp: new Date().toISOString(),
+          });
+        }
+      });
+      toast.success("영구 삭제되었습니다.");
+    } else {
+      softDeleteCases(ids);
+      ids.forEach((caseId) => {
+        const c = filtered.find((x) => x.id === caseId);
+        if (c) {
+          appendCaseHistory({
+            caseId,
+            caseNumber: c.caseNumber,
+            clientName: c.clientName,
+            action: "소프트삭제",
+            accountName: getCurrentAccount(),
+            timestamp: new Date().toISOString(),
+          });
+        }
+      });
+      toast.success("삭제 대기 상태로 변경되었습니다. 다시 선택 후 삭제 버튼을 누르면 영구 삭제됩니다.");
+    }
+    setSelectedRows(new Set());
+    setListRefreshKey((k) => k + 1);
+  };
+
+  const openHistoryPopup = () => {
+    const w = 720;
+    const h = 560;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open("/cases/history", "case-history", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginatedList = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filtered.slice(start, start + PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [appliedSearch, appliedStaffSearch, filters, sort]);
 
   const toggleSort = (field: keyof CaseItem) => {
     setSort((prev) =>
@@ -201,10 +306,20 @@ export default function CasesPage() {
   };
 
   const toggleAllRows = () => {
-    if (selectedRows.size === filtered.length) {
-      setSelectedRows(new Set());
+    const pageIds = paginatedList.map((c) => c.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedRows.has(id));
+    if (allSelected) {
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.delete(id));
+        return next;
+      });
     } else {
-      setSelectedRows(new Set(filtered.map((c) => c.id)));
+      setSelectedRows((prev) => {
+        const next = new Set(prev);
+        pageIds.forEach((id) => next.add(id));
+        return next;
+      });
     }
   };
 
@@ -352,7 +467,7 @@ export default function CasesPage() {
             />
           </div>
 
-          {/* 우측: 다운로드, 새로고침, 사건 등록 */}
+          {/* 우측: 다운로드, 새로고침, 사건 편집/삭제/이력, 사건 등록 */}
           <div className="flex items-center gap-1.5 ml-auto shrink-0">
             {selectedRows.size > 0 && (
               <Button variant="secondary" size="xs">
@@ -362,8 +477,29 @@ export default function CasesPage() {
             <Button variant="outline" size="xs" leftIcon={<Download size={12} />} onClick={handleExport}>
               엑셀(CSV) 다운로드
             </Button>
-            <Button variant="outline" size="xs" leftIcon={<RefreshCw size={12} />}>
+            <Button variant="outline" size="xs" leftIcon={<RefreshCw size={12} />} onClick={() => setListRefreshKey((k) => k + 1)}>
               새로고침
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              leftIcon={<Pencil size={12} />}
+              onClick={openEditPopup}
+              disabled={selectedRows.size !== 1}
+            >
+              사건 편집
+            </Button>
+            <Button
+              variant="outline"
+              size="xs"
+              leftIcon={<Trash2 size={12} />}
+              onClick={handleCaseDelete}
+              disabled={selectedRows.size === 0}
+            >
+              사건 삭제
+            </Button>
+            <Button variant="outline" size="xs" leftIcon={<History size={12} />} onClick={openHistoryPopup}>
+              이력관리
             </Button>
             <Link href="/cases/new">
               <Button size="xs" leftIcon={<Plus size={12} />}>
@@ -383,7 +519,10 @@ export default function CasesPage() {
                 <th className="w-10 px-3 py-3 text-left">
                   <input
                     type="checkbox"
-                    checked={selectedRows.size === filtered.length && filtered.length > 0}
+                    checked={
+                      paginatedList.length > 0 &&
+                      paginatedList.every((c) => selectedRows.has(c.id))
+                    }
                     onChange={toggleAllRows}
                     className="rounded border-slate-300 text-primary-600"
                   />
@@ -409,10 +548,11 @@ export default function CasesPage() {
             <tbody>
               {isLoading
                 ? Array.from({ length: 8 }).map((_, i) => <CaseRowSkeleton key={i} />)
-                : filtered.map((c) => {
+                : paginatedList.map((c) => {
                     const dday = c.nextDate ? getDDay(c.nextDate) : null;
                     const isSelected = selectedRows.has(c.id);
                     const isUrgent = dday !== null && dday <= 0;
+                    const isSoftDeleted = !!getSoftDeletedAt(c.id);
 
                     return (
                       <motion.tr
@@ -422,6 +562,7 @@ export default function CasesPage() {
                         className={cn(
                           "border-b border-slate-100 text-sm transition-all duration-150 group",
                           isSelected ? "bg-primary-50" : isUrgent ? "bg-danger-50/40 hover:bg-danger-50/70" : "hover:bg-primary-50/40",
+                          isSoftDeleted && "opacity-70 bg-slate-50",
                           "cursor-pointer"
                         )}
                         onClick={() => setSelectedCase(c)}
@@ -437,7 +578,12 @@ export default function CasesPage() {
 
                         {/* 사건번호 */}
                         <td className="px-3 py-2.5">
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isSoftDeleted && (
+                              <span className="text-[10px] bg-slate-200 text-slate-600 rounded px-1.5 py-0.5">
+                                삭제대기
+                              </span>
+                            )}
                             {c.isElectronic && <ElectronicBadge />}
                             {c.isImmutable && <ImmutableBadge />}
                             <span
@@ -459,16 +605,9 @@ export default function CasesPage() {
                           <div className="font-medium text-slate-800">{c.caseName}</div>
                         </td>
 
-                        {/* 기관: 직접 입력, localStorage 반영 (법원·검찰·경찰 등) */}
-                        <td className="px-3 py-2.5 text-xs" onClick={(e) => e.stopPropagation()}>
-                          <input
-                            type="text"
-                            value={c.court}
-                            onChange={(e) => updateCourt(c.id, e.target.value)}
-                            placeholder="법원·검찰·경찰 등"
-                            className="w-full min-w-[120px] px-2 py-1 rounded border border-slate-200 text-slate-700 bg-white focus:border-primary-500 focus:ring-1 focus:ring-primary-500/20 outline-none"
-                            onClick={(e) => e.stopPropagation()}
-                          />
+                        {/* 기관: 표시 전용 (편집은 사건 편집에서) */}
+                        <td className="px-3 py-2.5 text-xs text-slate-700">
+                          {c.court || "-"}
                         </td>
 
                         {/* 의뢰인 */}
@@ -481,8 +620,21 @@ export default function CasesPage() {
                           </span>
                         </td>
 
-                        {/* 담당 */}
-                        <td className="px-3 py-2.5 text-sm text-slate-700">{c.assignedStaff}</td>
+                        {/* 담당: 클릭 시 해당 사건 상세(타임라인) 새 창 */}
+                        <td className="px-3 py-2.5 text-sm text-slate-700" onClick={(e) => e.stopPropagation()}>
+                          {c.assignedStaff ? (
+                            <Link
+                              href={`/cases/${c.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary-600 hover:underline"
+                            >
+                              {c.assignedStaff}
+                            </Link>
+                          ) : (
+                            <span className="text-slate-400">-</span>
+                          )}
+                        </td>
 
                         {/* 보조 */}
                         <td className="px-3 py-2.5">
@@ -514,7 +666,7 @@ export default function CasesPage() {
           </table>
         ) : (
           <div className="p-5 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filtered.map((c) => {
+            {paginatedList.map((c) => {
               const dday = c.nextDate ? getDDay(c.nextDate) : null;
               return (
                 <motion.div
@@ -541,11 +693,83 @@ export default function CasesPage() {
                   </div>
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-100">
                     <StatusBadge status={c.status} />
-                    <div className="text-xs text-text-muted">{c.assignedStaff}</div>
+                    <div className="text-xs text-text-muted" onClick={(e) => e.stopPropagation()}>
+                      {c.assignedStaff ? (
+                        <Link href={`/cases/${c.id}`} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
+                          {c.assignedStaff}
+                        </Link>
+                      ) : (
+                        "-"
+                      )}
+                    </div>
                   </div>
                 </motion.div>
               );
             })}
+          </div>
+        )}
+
+        {filtered.length > 0 && totalPages > 1 && (
+          <div className="sticky bottom-0 left-0 right-0 flex items-center justify-between gap-4 px-4 py-3 bg-white border-t border-slate-200 shrink-0">
+            <div className="text-xs text-slate-500">
+              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} / {filtered.length}건
+            </div>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                leftIcon={<ChevronLeft size={14} />}
+              >
+                이전
+              </Button>
+              <div className="flex items-center gap-0.5">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((p) => {
+                    if (totalPages <= 7) return true;
+                    if (p === 1 || p === totalPages) return true;
+                    if (Math.abs(p - currentPage) <= 1) return true;
+                    return false;
+                  })
+                  .reduce<number[]>((acc, p) => {
+                    const last = acc[acc.length - 1];
+                    if (last !== undefined && p - last > 1) acc.push(-1);
+                    acc.push(p);
+                    return acc;
+                  }, [])
+                  .map((p) =>
+                    p === -1 ? (
+                      <span key="ellipsis" className="px-1.5 text-slate-400">
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setCurrentPage(p)}
+                        className={cn(
+                          "min-w-[28px] h-7 px-1.5 rounded text-xs font-medium transition-colors",
+                          currentPage === p
+                            ? "bg-primary-600 text-white"
+                            : "text-slate-600 hover:bg-slate-100"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    )
+                  )}
+              </div>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                rightIcon={<ChevronRight size={14} />}
+              >
+                다음
+              </Button>
+            </div>
           </div>
         )}
 

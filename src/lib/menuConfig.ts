@@ -19,10 +19,12 @@ export interface MenuItem {
 export const LNB_MENU: MenuItem[] = [
   { id: "dashboard", label: "대시보드", href: "/", icon: "LayoutDashboard", lawtopModule: "메인/업무현황" },
   { id: "cases", label: "사건 관리", href: "/cases", icon: "FolderOpen", lawtopModule: "사건관리" },
-  { id: "board", label: "전문 게시판", href: "/board", icon: "LayoutList", lawtopModule: "게시판" },
+  { id: "board", label: "게시판", href: "/board", icon: "LayoutList", lawtopModule: "게시판" },
   { id: "calendar", label: "기일 달력", href: "/calendar", icon: "Calendar", lawtopModule: "기일/일정" },
   { id: "consultation", label: "상담관리", href: "/consultation", icon: "MessageSquare", lawtopModule: "상담/회의실" },
+  { id: "clients", label: "고객관리", href: "/clients", icon: "UserCircle", lawtopModule: "고객관리" },
   { id: "messenger", label: "메신저", href: "/messenger", icon: "Send", lawtopModule: "메신저" },
+  { id: "internal-messenger", label: "사내 메신저", href: "/internal-messenger", icon: "MessageCircle", lawtopModule: "사내메신저" },
   { id: "approval", label: "전자결재", href: "/approval", icon: "FileText", badge: 0, lawtopModule: "LawTopProcess" },
   { id: "finance", label: "회계/수납", href: "/finance", icon: "CreditCard", lawtopModule: "LawTopCashReceipt" },
   { id: "stats", label: "통계/분석", href: "/stats", icon: "BarChart3", lawtopModule: "Reports" },
@@ -44,7 +46,9 @@ export const MOBILE_MAIN_MENU: MenuItem[] = [
 export const MOBILE_MORE_MENU: MenuItem[] = [
   { id: "calendar", label: "기일 달력", href: "/calendar", icon: "CalendarDays" },
   { id: "consultation", label: "상담관리", href: "/consultation", icon: "MessageSquare" },
+  { id: "clients", label: "고객관리", href: "/clients", icon: "UserCircle" },
   { id: "messenger", label: "메신저", href: "/messenger", icon: "Send" },
+  { id: "internal-messenger", label: "사내 메신저", href: "/internal-messenger", icon: "MessageCircle" },
   { id: "stats", label: "통계/분석", href: "/stats", icon: "BarChart3" },
   { id: "staff", label: "직원 관리", href: "/staff", icon: "Users" },
   { id: "notifications", label: "알림", href: "/notifications", icon: "Bell" },

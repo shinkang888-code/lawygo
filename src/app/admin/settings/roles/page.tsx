@@ -25,7 +25,7 @@ import {
 const MENU_ITEMS = [
   { id: "dashboard", label: "대시보드", path: "/" },
   { id: "cases", label: "사건 관리", path: "/cases" },
-  { id: "board", label: "전문 게시판", path: "/board" },
+  { id: "board", label: "게시판", path: "/board" },
   { id: "calendar", label: "기일 달력", path: "/calendar" },
   { id: "consultation", label: "상담관리", path: "/consultation" },
   { id: "messenger", label: "메신저", path: "/messenger" },

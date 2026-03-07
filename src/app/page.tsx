@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { PriorityCard } from "@/components/dashboard/PriorityCard";
@@ -11,11 +11,17 @@ import { cn } from "@/lib/utils";
 import { StatusBadge, DDayBadge, ElectronicBadge } from "@/components/ui/badge";
 import {
   FolderOpen, AlertTriangle, FileCheck, CreditCard,
-  Coffee, TrendingUp, Clock, CalendarDays, ArrowRight,
+  Coffee, TrendingUp, Clock, CalendarDays, ArrowRight, Megaphone, Search,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDeleteModal } from "@/components/ui/confirm-modal";
 import { toast } from "@/components/ui/toast";
+import { loadNotices, searchNotices } from "@/lib/noticeStorage";
+
+const NOTICE_PAGE_SIZE = 5;
+const MY_TASKS_PAGE_SIZE = 15;
+const APPROVAL_PAGE_SIZE = 7;
+const UPCOMING_PAGE_SIZE = 7;
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -28,14 +34,75 @@ const itemVariants = {
 
 export default function DashboardPage() {
   const [deleteTarget, setDeleteTarget] = useState<{ caseNumber: string; id: string } | null>(null);
+  const [noticeSearchQuery, setNoticeSearchQuery] = useState("");
+  const [noticePage, setNoticePage] = useState(1);
+  const [noticeList, setNoticeList] = useState<{ id: string; title: string; updatedAt: string }[]>([]);
+  const [noticeTotalPages, setNoticeTotalPages] = useState(1);
 
-  const myTasks = mockCases.filter(
-    (c) => c.assignedStaff === "김민준" || c.assistants.includes("김민준")
+  useEffect(() => {
+    const filtered = noticeSearchQuery.trim()
+      ? searchNotices(noticeSearchQuery)
+      : loadNotices();
+    const total = Math.max(1, Math.ceil(filtered.length / NOTICE_PAGE_SIZE));
+    const start = (noticePage - 1) * NOTICE_PAGE_SIZE;
+    const pageItems = filtered.slice(start, start + NOTICE_PAGE_SIZE);
+    setNoticeList(pageItems.map((n) => ({ id: n.id, title: n.title, updatedAt: n.updatedAt })));
+    setNoticeTotalPages(total);
+  }, [noticeSearchQuery, noticePage]);
+
+  const openNoticeWindow = (id: string) => {
+    const url = `/notices?id=${encodeURIComponent(id)}`;
+    window.open(url, "notice", "width=640,height=720,scrollbars=yes,resizable=yes");
+  };
+
+  const myTasks = useMemo(
+    () =>
+      mockCases
+        .filter((c) => c.assignedStaff === "김민준" || c.assistants.includes("김민준"))
+        .sort((a, b) => {
+          const dA = a.nextDate ? getDDay(a.nextDate) : 999999;
+          const dB = b.nextDate ? getDDay(b.nextDate) : 999999;
+          return dA - dB;
+        }),
+    []
   );
 
-  const upcomingCases = mockCases
-    .filter((c) => c.nextDate && getDDay(c.nextDate) >= 0 && getDDay(c.nextDate) <= 14)
-    .sort((a, b) => new Date(a.nextDate!).getTime() - new Date(b.nextDate!).getTime());
+  const [myTasksPage, setMyTasksPage] = useState(1);
+  const myTasksTotalPages = Math.max(1, Math.ceil(myTasks.length / MY_TASKS_PAGE_SIZE));
+  const myTasksToShow = useMemo(
+    () => myTasks.slice((myTasksPage - 1) * MY_TASKS_PAGE_SIZE, myTasksPage * MY_TASKS_PAGE_SIZE),
+    [myTasks, myTasksPage]
+  );
+
+  const upcomingCases = useMemo(
+    () =>
+      mockCases
+        .filter((c) => c.nextDate && getDDay(c.nextDate) >= 0 && getDDay(c.nextDate) <= 14)
+        .sort((a, b) => new Date(a.nextDate!).getTime() - new Date(b.nextDate!).getTime()),
+    []
+  );
+
+  const [approvalPage, setApprovalPage] = useState(1);
+  const approvalTotalPages = Math.max(1, Math.ceil(mockApprovals.length / APPROVAL_PAGE_SIZE));
+  const approvalsToShow = useMemo(
+    () =>
+      mockApprovals.slice(
+        (approvalPage - 1) * APPROVAL_PAGE_SIZE,
+        approvalPage * APPROVAL_PAGE_SIZE
+      ),
+    [approvalPage]
+  );
+
+  const [upcomingPage, setUpcomingPage] = useState(1);
+  const upcomingTotalPages = Math.max(1, Math.ceil(upcomingCases.length / UPCOMING_PAGE_SIZE));
+  const upcomingToShow = useMemo(
+    () =>
+      upcomingCases.slice(
+        (upcomingPage - 1) * UPCOMING_PAGE_SIZE,
+        upcomingPage * UPCOMING_PAGE_SIZE
+      ),
+    [upcomingCases, upcomingPage]
+  );
 
   return (
     <div className="p-4 sm:p-6 max-w-screen-2xl mx-auto">
@@ -58,6 +125,89 @@ export default function DashboardPage() {
             <Link href="/cases/new">
               <Button size="sm" leftIcon={<FolderOpen size={14} />}>사건 등록</Button>
             </Link>
+          </div>
+        </motion.div>
+
+        {/* 공지사항 (검색 + 목록 + 페이지네이션) */}
+        <motion.div variants={itemVariants}>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <Megaphone size={16} className="text-primary-600" />
+                <h2 className="text-sm font-semibold text-slate-800">공지사항</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => window.open("/notices", "notice", "width=640,height=720,scrollbars=yes,resizable=yes")}
+                className="text-xs text-primary-600 hover:underline flex items-center gap-1"
+              >
+                전체 보기 <ArrowRight size={12} />
+              </button>
+            </div>
+            <div className="p-4">
+              <div className="flex gap-2 mb-3">
+                <input
+                  type="text"
+                  value={noticeSearchQuery}
+                  onChange={(e) => {
+                    setNoticeSearchQuery(e.target.value);
+                    setNoticePage(1);
+                  }}
+                  onKeyDown={(e) => e.key === "Enter" && setNoticePage(1)}
+                  placeholder="제목·내용 검색"
+                  className="flex-1 min-w-0 px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 focus:ring-2 focus:ring-primary-600/20 outline-none"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setNoticePage(1)}
+                  className="shrink-0"
+                  leftIcon={<Search size={14} />}
+                >
+                  검색
+                </Button>
+              </div>
+              <div className="divide-y divide-slate-50">
+                {noticeList.length === 0 ? (
+                  <div className="px-2 py-6 text-center text-sm text-text-muted">
+                    {noticeSearchQuery.trim() ? "검색 결과가 없습니다." : "등록된 공지가 없습니다."}
+                  </div>
+                ) : (
+                  noticeList.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => openNoticeWindow(n.id)}
+                      className="w-full flex items-center justify-between gap-3 px-2 py-3 text-left hover:bg-slate-50 transition-colors"
+                    >
+                      <span className="text-sm font-medium text-slate-800 truncate flex-1">{n.title}</span>
+                      <span className="text-xs text-text-muted shrink-0">
+                        {new Date(n.updatedAt).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+              {noticeTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-1 mt-3 pt-3 border-t border-slate-100">
+                  <span className="text-xs text-text-muted mr-1">목록:</span>
+                  {Array.from({ length: noticeTotalPages }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setNoticePage(p)}
+                      className={cn(
+                        "min-w-[28px] h-7 px-1.5 rounded text-xs font-medium transition-colors",
+                        noticePage === p ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </motion.div>
 
@@ -106,20 +256,21 @@ export default function DashboardPage() {
                   <div className="text-xs text-text-muted mt-1">여유로운 하루 되세요 ☕</div>
                 </div>
               ) : (
-                <div className="flex-1 min-h-0 overflow-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="bg-slate-50/70 text-xs text-text-muted font-medium">
-                        <th className="text-left px-4 py-2.5">사건번호</th>
-                        <th className="text-left px-4 py-2.5">사건명</th>
-                        <th className="text-left px-4 py-2.5 hidden md:table-cell">법원</th>
-                        <th className="text-left px-4 py-2.5">다음 기일</th>
-                        <th className="text-left px-4 py-2.5">상태</th>
-                        <th className="text-left px-4 py-2.5 hidden lg:table-cell">D-Day</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {myTasks.map((c) => {
+                <>
+                  <div className="flex-1 min-h-0 overflow-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-slate-50/70 text-xs text-text-muted font-medium">
+                          <th className="text-left px-4 py-2.5">사건번호</th>
+                          <th className="text-left px-4 py-2.5">사건명</th>
+                          <th className="text-left px-4 py-2.5 hidden md:table-cell">법원</th>
+                          <th className="text-left px-4 py-2.5">다음 기일</th>
+                          <th className="text-left px-4 py-2.5">상태</th>
+                          <th className="text-left px-4 py-2.5 hidden lg:table-cell">D-Day</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myTasksToShow.map((c) => {
                         const dday = c.nextDate ? getDDay(c.nextDate) : null;
                         return (
                           <tr
@@ -162,9 +313,28 @@ export default function DashboardPage() {
                           </tr>
                         );
                       })}
-                    </tbody>
-                  </table>
-                </div>
+                      </tbody>
+                    </table>
+                  </div>
+                  {myTasksTotalPages > 1 && (
+                    <div className="flex items-center justify-center gap-1 px-4 py-3 border-t border-slate-100 shrink-0">
+                      <span className="text-xs text-text-muted mr-1">목록:</span>
+                      {Array.from({ length: myTasksTotalPages }, (_, i) => i + 1).map((p) => (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => setMyTasksPage(p)}
+                          className={cn(
+                            "min-w-[28px] h-7 px-1.5 rounded text-xs font-medium transition-colors",
+                            myTasksPage === p ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                          )}
+                        >
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -183,7 +353,7 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="divide-y divide-slate-50">
-                {mockApprovals.map((ap) => (
+                {approvalsToShow.map((ap) => (
                   <Link key={ap.id} href="/approval" className="block px-4 py-3 hover:bg-slate-50 cursor-pointer transition-colors">
                     <div className="text-sm font-medium text-slate-800 truncate">{ap.title}</div>
                     <div className="flex items-center justify-between mt-1">
@@ -193,6 +363,23 @@ export default function DashboardPage() {
                   </Link>
                 ))}
               </div>
+              {approvalTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-1 px-4 py-2.5 border-t border-slate-100">
+                  {Array.from({ length: approvalTotalPages }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setApprovalPage(p)}
+                      className={cn(
+                        "min-w-[26px] h-6 px-1 rounded text-xs font-medium transition-colors",
+                        approvalPage === p ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="px-4 py-2.5 bg-slate-50">
                 <Link href="/approval" className="text-xs text-primary-600 font-medium hover:underline flex items-center gap-1">
                   결재함 바로가기 <ArrowRight size={11} />
@@ -209,14 +396,14 @@ export default function DashboardPage() {
                 </div>
               </div>
               <div className="divide-y divide-slate-50 flex-1 min-h-0 overflow-auto">
-                {upcomingCases.slice(0, 5).map((c) => {
+                {upcomingToShow.map((c) => {
                   const dday = getDDay(c.nextDate!);
                   return (
                     <Link key={c.id} href={`/cases/${c.id}`}
                       className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors"
                     >
                       <div className={cn(
-                        "text-center w-10 flex-shrink-0 rounded-lg py-1",
+                        "text-center w-10 shrink-0 rounded-lg py-1",
                         dday === 0 ? "bg-danger-100" : dday <= 3 ? "bg-warning-100" : "bg-slate-100"
                       )}>
                         <div className={cn(
@@ -238,6 +425,23 @@ export default function DashboardPage() {
                   );
                 })}
               </div>
+              {upcomingTotalPages > 1 && (
+                <div className="flex items-center justify-center gap-1 px-4 py-2.5 border-t border-slate-100 shrink-0">
+                  {Array.from({ length: upcomingTotalPages }, (_, i) => i + 1).map((p) => (
+                    <button
+                      key={p}
+                      type="button"
+                      onClick={() => setUpcomingPage(p)}
+                      className={cn(
+                        "min-w-[26px] h-6 px-1 rounded text-xs font-medium transition-colors",
+                        upcomingPage === p ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                      )}
+                    >
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
           </div>

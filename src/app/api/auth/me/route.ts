@@ -10,7 +10,7 @@ import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import { hashPassword, verifyPassword } from "@/lib/authPassword";
 import { createSessionCookie } from "@/lib/authSession";
 
-const ROLE_OPTIONS = ["임원", "변호사", "사무장", "국장", "직원", "사무원", "인턴"] as const;
+const ROLE_OPTIONS = ["관리자", "임원", "변호사", "사무장", "국장", "직원", "사무원", "인턴"] as const;
 
 export async function GET() {
   const session = await getSession();

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   CalendarDays,
   Plus,
@@ -10,13 +11,13 @@ import {
   Save,
   X,
   Settings2,
-  ChevronDown,
+  FileText,
+  ExternalLink,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import type { DeadlineItem, DeadlineFormFieldConfig } from "@/lib/types";
 import {
-  loadDeadlines,
   getDeadlinesForDate,
   saveDeadline,
   softDeleteDeadline,
@@ -24,6 +25,7 @@ import {
   saveFormSchema,
   DEFAULT_FORM_SCHEMA,
 } from "@/lib/deadlineStorage";
+import { mockCases } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 
 function toDateStr(d: Date): string {
@@ -60,6 +62,18 @@ export default function CalendarManagePage() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.title = `${dateParam} 기일 · LawyGo`;
+    }
+  }, [dateParam]);
+
+  const casesForDay = useMemo(
+    () => mockCases.filter((c) => c.nextDate === dateParam),
+    [dateParam]
+  );
+  const totalCount = casesForDay.length + deadlines.length;
 
   const openNewForm = () => {
     const s = loadFormSchema();
@@ -137,9 +151,11 @@ export default function CalendarManagePage() {
         <div>
           <h1 className="text-xl font-bold text-slate-900 flex items-center gap-2">
             <CalendarDays size={22} className="text-primary-600" />
-            기일 관리
+            {dateParam} 기일
           </h1>
-          <p className="text-sm text-text-muted mt-0.5">{dateParam} · 해당 날짜 기일 {deadlines.length}건</p>
+          <p className="text-sm text-text-muted mt-0.5">
+            사건 기일 {casesForDay.length}건 · 등록 기일 {deadlines.length}건 (총 {totalCount}건)
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button type="button" variant="outline" size="sm" onClick={openSchemaEdit} leftIcon={<Settings2 size={14} />}>
@@ -151,8 +167,45 @@ export default function CalendarManagePage() {
         </div>
       </div>
 
-      {/* 해당 날짜 기일 목록 */}
+      {/* 해당 날짜 사건 기일 (사건관리에서 온 목록) */}
+      {casesForDay.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+            <FileText size={14} />
+            사건 기일 ({casesForDay.length}건)
+          </h2>
+          <div className="space-y-2">
+            {casesForDay.map((c) => (
+              <Link
+                key={c.id}
+                href={`/cases/${c.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-primary-50/40 p-3 shadow-sm hover:bg-primary-50/70 transition-colors group"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="font-medium text-slate-800 truncate">
+                    {c.caseNumber} · {c.caseName}
+                  </p>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    {c.nextDateType}
+                    {c.court && ` · ${c.court}`}
+                    {c.assignedStaff && ` · 담당: ${c.assignedStaff}`}
+                  </p>
+                </div>
+                <ExternalLink size={14} className="text-slate-400 group-hover:text-primary-600 shrink-0" />
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 등록 기일 (등록·편집·소프트삭제) */}
       <div className="space-y-2 mb-6">
+        <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
+          <CalendarDays size={14} />
+          등록 기일 ({deadlines.length}건) · 등록/편집/삭제
+        </h2>
         {deadlines.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center text-sm text-text-muted">
             이 날짜에 등록된 기일이 없습니다. &quot;기일 등록&quot;으로 추가하세요.
@@ -278,8 +331,8 @@ export default function CalendarManagePage() {
             <div className="p-5 space-y-3">
               <p className="text-xs text-text-muted">필드 순서와 라벨·타입을 수정할 수 있습니다. 저장 시 기일 등록 폼에 반영됩니다.</p>
               {schemaDraft.map((f, idx) => (
-                <div key={idx} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
-                  <span className="text-xs text-slate-400 w-8">{idx + 1}</span>
+                <div key={f.key} className="flex items-center gap-2 rounded-lg border border-slate-100 p-2">
+                  <span className="text-xs text-slate-400 w-8 shrink-0">{idx + 1}</span>
                   <input
                     type="text"
                     value={f.label}
@@ -287,7 +340,7 @@ export default function CalendarManagePage() {
                       setSchemaDraft((s) => s.map((x, i) => (i === idx ? { ...x, label: e.target.value } : x)))
                     }
                     placeholder="라벨"
-                    className="flex-1 px-2 py-1.5 text-sm rounded border border-slate-200"
+                    className="flex-1 min-w-0 px-2 py-1.5 text-sm rounded border border-slate-200"
                   />
                   <select
                     value={f.type}
@@ -298,14 +351,14 @@ export default function CalendarManagePage() {
                         )
                       )
                     }
-                    className="px-2 py-1.5 text-sm rounded border border-slate-200"
+                    className="shrink-0 px-2 py-1.5 text-sm rounded border border-slate-200 w-24"
                   >
                     <option value="text">텍스트</option>
                     <option value="date">날짜</option>
                     <option value="select">선택</option>
                     <option value="textarea">긴 글</option>
                   </select>
-                  <label className="flex items-center gap-1 text-xs">
+                  <label className="flex shrink-0 items-center gap-1 text-xs whitespace-nowrap">
                     <input
                       type="checkbox"
                       checked={f.required ?? false}
@@ -315,8 +368,36 @@ export default function CalendarManagePage() {
                     />
                     필수
                   </label>
+                  <button
+                    type="button"
+                    onClick={() => setSchemaDraft((s) => s.filter((_, i) => i !== idx))}
+                    className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-danger-500"
+                    title="필드 삭제"
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full border-dashed border-slate-200 text-slate-600 hover:border-primary-300 hover:text-primary-600"
+                leftIcon={<Plus size={14} />}
+                onClick={() =>
+                  setSchemaDraft((s) => [
+                    ...s,
+                    {
+                      key: `field_${Date.now()}`,
+                      label: "새 필드",
+                      type: "text" as const,
+                      required: false,
+                    },
+                  ])
+                }
+              >
+                필드 추가
+              </Button>
               <div className="flex gap-2 pt-2">
                 <Button type="button" size="sm" onClick={saveSchemaEdit} leftIcon={<Save size={14} />}>
                   양식 저장

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Send, Search, Plus, FileText, Smartphone, X } from "lucide-react";
+import { Send, Search, Plus, FileText, Smartphone, X, MessageCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import {
@@ -28,7 +28,7 @@ export default function MessengerPage() {
   const [phoneBlocks, setPhoneBlocks] = useState<string[]>([]);
   const [phoneInput, setPhoneInput] = useState("");
   const [content, setContent] = useState("");
-  const [channel, setChannel] = useState<"sms" | "kakao">("sms");
+  const [channel, setChannel] = useState<"sms" | "kakao" | "telegram">("sms");
   const [sending, setSending] = useState(false);
 
   const [templates, setTemplates] = useState<MessengerTemplate[]>([]);
@@ -59,6 +59,24 @@ export default function MessengerPage() {
   };
 
   const addPhoneBlock = () => {
+    if (channel === "telegram") {
+      const id = phoneInput.trim();
+      if (!id) {
+        toast.error("Telegram Chat ID를 입력하세요.");
+        return;
+      }
+      if (phoneBlocks.includes(id)) {
+        toast.error("이미 추가된 수신자입니다.");
+        return;
+      }
+      if (phoneBlocks.length >= MAX_PHONES) {
+        toast.error(`수신자는 최대 ${MAX_PHONES}개까지 가능합니다.`);
+        return;
+      }
+      setPhoneBlocks((prev) => [...prev, id]);
+      setPhoneInput("");
+      return;
+    }
     const num = normalizePhone(phoneInput);
     if (num.length < 10) {
       toast.error("올바른 전화번호를 입력하세요.");
@@ -80,22 +98,30 @@ export default function MessengerPage() {
     setPhoneBlocks((prev) => prev.filter((n) => n !== num));
   };
 
-  const receiverList = phoneBlocks.filter((p) => p.length >= 10);
+  const receiverList =
+    channel === "telegram"
+      ? phoneBlocks.filter((p) => p.trim().length > 0)
+      : phoneBlocks.filter((p) => p.length >= 10);
   const canSend = receiverList.length > 0 && content.trim().length > 0;
 
   const handleSend = async () => {
     if (!canSend) {
-      if (receiverList.length === 0) toast.error("수신 번호를 1개 이상 입력하세요.");
+      if (receiverList.length === 0) toast.error(channel === "telegram" ? "수신자(Chat ID)를 1개 이상 입력하세요." : "수신 번호를 1개 이상 입력하세요.");
       else toast.error("발송 내용을 입력하세요.");
       return;
     }
     if (receiverList.length > MAX_PHONES) {
-      toast.error(`수신 번호는 최대 ${MAX_PHONES}개까지 가능합니다.`);
+      toast.error(`수신자는 최대 ${MAX_PHONES}개까지 가능합니다.`);
       return;
     }
     setSending(true);
     try {
-      const endpoint = channel === "sms" ? "/api/messenger/sms" : "/api/messenger/kakao";
+      const endpoint =
+        channel === "sms"
+          ? "/api/messenger/sms"
+          : channel === "kakao"
+            ? "/api/messenger/kakao"
+            : "/api/messenger/telegram";
       const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -128,13 +154,15 @@ export default function MessengerPage() {
           <div className="px-5 py-3 border-b border-slate-100 bg-slate-50/70">
             <h2 className="text-sm font-semibold text-slate-800">내용 발송</h2>
             <p className="text-xs text-text-muted mt-0.5">
-              수신 번호를 입력하면 블록으로 추가됩니다. 최대 5개, 내용 입력 후 발송하세요.
+              {channel === "telegram"
+                ? "수신자(Telegram Chat ID)를 입력하면 블록으로 추가됩니다. 최대 5개, 내용 입력 후 발송하세요."
+                : "수신 번호를 입력하면 블록으로 추가됩니다. 최대 5개, 내용 입력 후 발송하세요."}
             </p>
           </div>
           <div className="p-5 flex-1 flex flex-col gap-4 overflow-y-auto">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                수신 번호 (최대 5개)
+                {channel === "telegram" ? "수신자 (Telegram Chat ID, 최대 5개)" : "수신 번호 (최대 5개)"}
               </label>
               <div className="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-slate-200 bg-white min-h-[42px] focus-within:ring-2 focus-within:ring-primary-500/20 focus-within:border-primary-500">
                 {phoneBlocks.map((num) => (
@@ -142,7 +170,7 @@ export default function MessengerPage() {
                     key={num}
                     className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md bg-primary-50 text-primary-800 text-sm font-medium"
                   >
-                    {formatPhoneDisplay(num)}
+                    {channel === "telegram" ? num : formatPhoneDisplay(num)}
                     <button
                       type="button"
                       onClick={() => removePhoneBlock(num)}
@@ -155,7 +183,7 @@ export default function MessengerPage() {
                 ))}
                 {phoneBlocks.length < MAX_PHONES && (
                   <input
-                    type="tel"
+                    type={channel === "telegram" ? "text" : "tel"}
                     value={phoneInput}
                     onChange={(e) => setPhoneInput(e.target.value)}
                     onKeyDown={(e) => {
@@ -164,7 +192,13 @@ export default function MessengerPage() {
                         addPhoneBlock();
                       }
                     }}
-                    placeholder={phoneBlocks.length === 0 ? "전화번호 입력 후 Enter" : "번호 추가"}
+                    placeholder={
+                      channel === "telegram"
+                        ? (phoneBlocks.length === 0 ? "Chat ID 입력 후 Enter" : "Chat ID 추가")
+                        : phoneBlocks.length === 0
+                          ? "전화번호 입력 후 Enter"
+                          : "번호 추가"
+                    }
                     className="flex-1 min-w-[120px] px-2 py-1 text-sm border-0 focus:outline-none focus:ring-0"
                   />
                 )}
@@ -214,6 +248,18 @@ export default function MessengerPage() {
                   )}
                 >
                   <Send size={14} /> 카카오톡
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setChannel("telegram")}
+                  className={cn(
+                    "px-4 py-2 text-sm font-medium flex items-center gap-1.5",
+                    channel === "telegram"
+                      ? "bg-primary-600 text-white"
+                      : "bg-white text-slate-600 hover:bg-slate-50"
+                  )}
+                >
+                  <MessageCircle size={14} /> 텔레그램
                 </button>
               </div>
             </div>

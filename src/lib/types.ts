@@ -34,14 +34,14 @@ export type CaseStatus =
   | "종결";
 
 /** 직원 역할 (폼 선택용) */
-export type StaffRoleOption = "임원" | "변호사" | "사무장" | "국장" | "직원";
+export type StaffRoleOption = "관리자" | "임원" | "변호사" | "사무장" | "국장" | "직원";
 /** 직급 (폼 선택용) */
 export type JobTitleOption = "부장" | "팀장" | "과장" | "대리" | "주임" | "인턴";
 
 export interface StaffMember {
   id: string;
   name: string;
-  role: "임원" | "변호사" | "사무장" | "국장" | "직원" | "사무원" | "인턴"; // 기존 호환 포함
+  role: "관리자" | "임원" | "변호사" | "사무장" | "국장" | "직원" | "사무원" | "인턴"; // 기존 호환 포함
   department: string;
   email: string;
   phone: string;
@@ -53,6 +53,10 @@ export interface StaffMember {
   companyPhone?: string;
   /** 개인 전화 */
   personalPhone?: string;
+  /** 로그인 아이디 (site_users 연동 시 사용, 비밀번호는 서버에만 저장) */
+  loginId?: string;
+  /** 관리번호 (로그인 화면 등에서 사용) */
+  managementNumber?: string;
 }
 
 export interface ApprovalDoc {
@@ -71,6 +75,8 @@ export interface ApprovalDoc {
   notes?: string;
   /** 기안 시 첨부 파일 목록 (파일명) */
   attachmentNames?: string[];
+  /** 참조자 (결재하지 않고 문서 확인만) */
+  referrerNames?: string[];
 }
 
 export type ApprovalStatus =
@@ -255,4 +261,56 @@ export interface DeadlineFormFieldConfig {
   required?: boolean;
   placeholder?: string;
   options?: { value: string; label: string }[];
+}
+
+/** 공지사항 (관리자 → 이용자) */
+export interface NoticeItem {
+  id: string;
+  title: string;
+  content: string;
+  authorName: string;
+  createdAt: string;
+  updatedAt: string;
+  /** 소프트 삭제 시 설정 */
+  deletedAt?: string;
+  /** 첨부파일 이름 목록 */
+  attachmentNames?: string[];
+  /** 첨부파일 데이터 (base64, 다운로드용) */
+  attachmentData?: { name: string; data: string }[];
+}
+
+/** 고객(의뢰인) - 사건 등록 시 저장한 의뢰인 정보 */
+export interface ClientItem {
+  id: string;
+  name: string;
+  phone?: string;
+  mobile?: string;
+  email?: string;
+  address?: string;
+  idNumber?: string;
+  bizNumber?: string;
+  memo?: string;
+  createdAt: string;
+  updatedAt: string;
+  /** 소프트 삭제 시 설정 (관리자 복구 가능) */
+  deletedAt?: string;
+  /** 콜센터 전화 메모 ID 목록 (최신순, 이름 클릭 시 메모 새창 표시) */
+  callMemoIds?: string[];
+}
+
+/** 사내 메신저 메시지 (직원 간 문자·첨부 송수신) */
+export interface InternalMessage {
+  id: string;
+  senderId: string;
+  senderName: string;
+  recipientId: string;
+  recipientName: string;
+  body: string;
+  /** 첨부 파일명 목록 */
+  attachmentNames: string[];
+  /** 첨부 파일 데이터 (base64 또는 blob URL) - 간단 구현용 */
+  attachmentData?: { name: string; data: string }[];
+  createdAt: string;
+  /** 수신자가 읽은 시각 */
+  readAt?: string;
 }

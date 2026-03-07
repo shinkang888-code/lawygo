@@ -1,12 +1,22 @@
 /**
  * 비밀번호 재설정: 아이디 + 관리번호로 본인 확인 후 새 비밀번호로 변경
+ * Rate limiting 적용 (브루트포스 방지)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import { hashPassword } from "@/lib/authPassword";
+import { checkRateLimit, getClientIdentifier, LIMIT_AUTH_PER_MIN } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  const clientId = getClientIdentifier(request);
+  if (!checkRateLimit(`auth:password-reset:${clientId}`, LIMIT_AUTH_PER_MIN)) {
+    return NextResponse.json(
+      { error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+      { status: 429 }
+    );
+  }
+
   let body: { loginId?: string; managementNumber?: string; newPassword?: string };
   try {
     body = await request.json();

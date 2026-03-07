@@ -26,6 +26,8 @@ import {
   Home,
   Search,
   Send,
+  UserCircle,
+  MessageCircle,
 } from "lucide-react";
 import { getMenuForRoles } from "@/lib/menuConfig";
 import { useMenus } from "@/hooks/useMenus";
@@ -50,6 +52,8 @@ const iconMap: Record<string, React.ComponentType<{ size?: number }>> = {
   Home,
   Search,
   Send,
+  UserCircle,
+  MessageCircle,
 };
 
 const FALLBACK_USER = { name: "사용자", role: "직원", permissions: ["직원"] };
@@ -61,20 +65,31 @@ export function Sidebar() {
   const [currentUser, setCurrentUser] = useState<{ name: string; role: string; permissions: string[] }>(FALLBACK_USER);
 
   useEffect(() => {
+    function applyUser(u: { name?: string; loginId?: string; role?: string } | null) {
+      if (!u) return;
+      const name = u.name || u.loginId || "사용자";
+      const role = u.role || "직원";
+      setCurrentUser({
+        name,
+        role,
+        permissions: [role, "관리자", "변호사", "사무장", "직원"].filter((p, i, a) => a.indexOf(p) === i),
+      });
+    }
     fetch("/api/auth/me", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.user) {
-          const name = d.user.name || d.user.loginId || "사용자";
-          const role = d.user.role || "직원";
-          setCurrentUser({
-            name,
-            role,
-            permissions: [role, "관리자", "변호사", "사무장", "직원"].filter((p, i, a) => a.indexOf(p) === i),
-          });
+        if (d?.user) applyUser(d.user);
+        else {
+          return fetch("/api/auth/session", { credentials: "include" })
+            .then((r) => r.json())
+            .then((s) => s?.user && applyUser(s.user));
         }
       })
-      .catch(() => {});
+      .catch(() => {
+        fetch("/api/auth/session", { credentials: "include" })
+          .then((r) => r.json())
+          .then((s) => s?.user && applyUser(s.user));
+      });
   }, []);
 
   const filteredNav = getMenuForRoles(lnb, currentUser.permissions).filter((item) => item.href !== "#more");

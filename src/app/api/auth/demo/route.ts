@@ -21,8 +21,20 @@ export async function POST() {
 
   const db = getSupabaseAdmin();
   if (!db) {
+    const hasUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const hasKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const missing = [
+      ...(!hasUrl ? ["NEXT_PUBLIC_SUPABASE_URL"] : []),
+      ...(!hasKey ? ["SUPABASE_SERVICE_ROLE_KEY"] : []),
+    ];
     return NextResponse.json(
-      { error: "DB가 연결되지 않았습니다. Vercel 환경 변수를 확인해 주세요." },
+      {
+        error: "DB가 연결되지 않았습니다. 환경 변수를 확인해 주세요.",
+        missing,
+        hint: missing.length
+          ? `Vercel 대시보드 또는 'vercel env add ${missing[0]} production' 후 재배포하세요.`
+          : "재배포 후에도 동일하면 Vercel 프로젝트 설정에서 환경 변수 적용 환경(Production/Preview)을 확인하세요.",
+      },
       { status: 503 }
     );
   }

@@ -61,6 +61,7 @@ export function ApprovalManagementTab() {
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editingItemName, setEditingItemName] = useState("");
   const [newFolderName, setNewFolderName] = useState("");
+  const [folderContextMenu, setFolderContextMenu] = useState<{ folderId: string; x: number; y: number } | null>(null);
 
   const completedDocs = useMemo(
     () => mockApprovals.filter((d) => d.status === COMPLETED) as ApprovalDoc[],
@@ -236,9 +237,14 @@ export function ApprovalManagementTab() {
   };
 
   const updateFolderName = (folderId: string, name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) {
+      toast.error("폴더명을 입력하세요.");
+      return;
+    }
     const folders = Array.isArray(archives.folders) ? archives.folders : [];
     const next: ApprovalArchivesState = {
-      folders: folders.map((f) => (f.id === folderId ? { ...f, name } : f)),
+      folders: folders.map((f) => (f.id === folderId ? { ...f, name: trimmed } : f)),
       items: Array.isArray(archives.items) ? archives.items : [],
     };
     setArchives(next);
@@ -248,6 +254,7 @@ export function ApprovalManagementTab() {
   };
 
   const deleteFolder = (folderId: string) => {
+    setFolderContextMenu(null);
     if (!confirm("폴더를 삭제하면 안의 항목은 루트로 이동합니다. 계속할까요?")) return;
     const folders = Array.isArray(archives.folders) ? archives.folders : [];
     const items = Array.isArray(archives.items) ? archives.items : [];
@@ -259,6 +266,15 @@ export function ApprovalManagementTab() {
     saveApprovalArchives(next);
     setEditingFolderId(null);
     toast.success("폴더가 삭제되었습니다.");
+  };
+
+  const startEditFolder = (folderId: string) => {
+    const folder = (Array.isArray(archives.folders) ? archives.folders : []).find((f) => f.id === folderId);
+    if (folder) {
+      setEditingFolderId(folder.id);
+      setEditingFolderName(folder.name);
+      setFolderContextMenu(null);
+    }
   };
 
   const updateItemName = (itemId: string, displayName: string) => {
@@ -306,6 +322,17 @@ export function ApprovalManagementTab() {
   const safeFolders = Array.isArray(archives.folders) ? archives.folders : [];
   const rootItems = safeItems.filter((i) => !i.folderId);
   const getFolderItems = (folderId: string) => safeItems.filter((i) => i.folderId === folderId);
+
+  useEffect(() => {
+    if (!folderContextMenu) return;
+    const close = () => setFolderContextMenu(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [folderContextMenu]);
 
   return (
     <section className="space-y-4">
@@ -459,14 +486,43 @@ export function ApprovalManagementTab() {
               type="text"
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && createFolder()}
-              placeholder="새 폴더명"
+              onKeyDown={(e) => e.key === "Enter" && newFolderName.trim() && createFolder()}
+              placeholder="새 폴더명 (입력 후 Enter 또는 폴더 생성)"
               className="flex-1 px-2 py-1.5 text-xs border border-slate-200 rounded-lg"
             />
-            <Button size="xs" onClick={createFolder} leftIcon={<FolderPlus size={12} />}>
+            <Button
+              size="xs"
+              onClick={createFolder}
+              disabled={!newFolderName.trim()}
+              leftIcon={<FolderPlus size={12} />}
+            >
               폴더 생성
             </Button>
           </div>
+          {folderContextMenu && (
+            <div
+              className="fixed z-50 min-w-[140px] py-1 bg-white border border-slate-200 rounded-lg shadow-lg text-xs"
+              style={{ left: folderContextMenu.x, top: folderContextMenu.y }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 flex items-center gap-2"
+                onClick={() => startEditFolder(folderContextMenu.folderId)}
+              >
+                <Pencil size={12} />
+                이름 변경
+              </button>
+              <button
+                type="button"
+                className="w-full px-3 py-2 text-left hover:bg-slate-100 flex items-center gap-2 text-danger-600"
+                onClick={() => deleteFolder(folderContextMenu.folderId)}
+              >
+                <Trash2 size={12} />
+                폴더 삭제
+              </button>
+            </div>
+          )}
           <div
             className="flex-1 min-h-0 overflow-auto p-2"
             onDragOver={(e) => e.preventDefault()}
@@ -499,37 +555,59 @@ export function ApprovalManagementTab() {
               <div className="space-y-2">
                 {safeFolders.map((folder) => (
                   <div key={folder.id} className="rounded-lg border border-slate-200 bg-slate-50/50">
-                    <div className="flex items-center gap-1 px-2 py-1.5">
-                      <FolderOpen size={14} className="text-slate-500" />
+                    <div
+                      className="flex items-center gap-1 px-2 py-1.5"
+                      onContextMenu={(e) => {
+                        e.preventDefault();
+                        if (editingFolderId === folder.id) return;
+                        setFolderContextMenu({ folderId: folder.id, x: e.clientX, y: e.clientY });
+                      }}
+                    >
+                      <FolderOpen size={14} className="text-slate-500 shrink-0" />
                       {editingFolderId === folder.id ? (
                         <>
                           <input
                             type="text"
                             value={editingFolderName}
                             onChange={(e) => setEditingFolderName(e.target.value)}
-                            className="flex-1 px-1 py-0.5 text-xs border rounded"
+                            className="flex-1 px-1 py-0.5 text-xs border rounded min-w-0"
                             onKeyDown={(e) => {
-                              if (e.key === "Enter") updateFolderName(folder.id, editingFolderName);
+                              if (e.key === "Enter" && editingFolderName.trim()) updateFolderName(folder.id, editingFolderName.trim());
                               if (e.key === "Escape") setEditingFolderId(null);
                             }}
+                            autoFocus
                           />
-                          <button onClick={() => updateFolderName(folder.id, editingFolderName)}>
+                          <button
+                            type="button"
+                            onClick={() => editingFolderName.trim() && updateFolderName(folder.id, editingFolderName.trim())}
+                            className="p-0.5 text-slate-600 hover:text-slate-800"
+                          >
                             <Check size={12} />
                           </button>
                         </>
                       ) : (
                         <>
-                          <span className="text-xs font-medium flex-1 truncate">{folder.name}</span>
+                          <span
+                            className="text-xs font-medium flex-1 truncate cursor-pointer select-none"
+                            onDoubleClick={() => startEditFolder(folder.id)}
+                            title="더블클릭: 이름 수정"
+                          >
+                            {folder.name}
+                          </span>
                           <button
-                            onClick={() => {
-                              setEditingFolderId(folder.id);
-                              setEditingFolderName(folder.name);
-                            }}
+                            type="button"
+                            onClick={() => startEditFolder(folder.id)}
                             className="p-0.5 text-slate-400 hover:text-slate-600"
+                            title="이름 수정"
                           >
                             <Pencil size={12} />
                           </button>
-                          <button onClick={() => deleteFolder(folder.id)} className="p-0.5 text-slate-400 hover:text-danger-500">
+                          <button
+                            type="button"
+                            onClick={() => deleteFolder(folder.id)}
+                            className="p-0.5 text-slate-400 hover:text-danger-500"
+                            title="폴더 삭제"
+                          >
                             <Trash2 size={12} />
                           </button>
                         </>

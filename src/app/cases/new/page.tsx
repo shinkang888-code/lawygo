@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 import { mockStaff } from "@/lib/mockData";
+import { saveClient, loadClientsRaw } from "@/lib/clientStorage";
 
 const caseTypes = ["형사", "민사", "행정", "헌법", "가사", "파산/회생", "기타"];
 const positions = ["피고인", "원고", "피고", "신청인", "피신청인", "채권자", "채무자", "청구인", "피청구인", "고소인"];
@@ -61,6 +62,33 @@ export default function NewCasePage() {
       return;
     }
     const assignedStr = [...selectedLawyers, ...selectedStaff].join(", ");
+    const name = form.clientName.trim();
+    const mobile = form.clientMobile?.trim();
+    const phone = form.clientPhone?.trim();
+    const existing = loadClientsRaw().find(
+      (c) => !c.deletedAt && c.name === name && (c.mobile === mobile || c.phone === phone || (!mobile && !phone))
+    );
+    if (existing) {
+      saveClient({
+        id: existing.id,
+        name,
+        phone: phone || undefined,
+        mobile: mobile || undefined,
+        address: form.clientAddress?.trim() || undefined,
+        idNumber: form.clientIdNumber?.trim() || undefined,
+        bizNumber: form.clientBizNumber?.trim() || undefined,
+        memo: existing.memo,
+      });
+    } else {
+      saveClient({
+        name,
+        phone: phone || undefined,
+        mobile: mobile || undefined,
+        address: form.clientAddress?.trim() || undefined,
+        idNumber: form.clientIdNumber?.trim() || undefined,
+        bizNumber: form.clientBizNumber?.trim() || undefined,
+      });
+    }
 
     toast.success("사건이 성공적으로 등록되었습니다.", {
       description: `${form.caseNumber} · ${form.caseName} / 담당: ${assignedStr}`,

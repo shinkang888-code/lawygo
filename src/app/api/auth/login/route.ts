@@ -1,13 +1,23 @@
 /**
  * 로그인: 아이디 + 비밀번호 + 관리번호 검증, 승인 회원만 로그인 가능
+ * Rate limiting 적용 (브루트포스 방지)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import { verifyPassword } from "@/lib/authPassword";
 import { createSessionCookie } from "@/lib/authSession";
+import { checkRateLimit, getClientIdentifier, LIMIT_AUTH_PER_MIN } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  const clientId = getClientIdentifier(request);
+  if (!checkRateLimit(`auth:login:${clientId}`, LIMIT_AUTH_PER_MIN)) {
+    return NextResponse.json(
+      { error: "로그인 시도가 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+      { status: 429 }
+    );
+  }
+
   let body: { loginId?: string; password?: string; managementNumber?: string };
   try {
     body = await request.json();

@@ -412,12 +412,21 @@ export default function AdminCasesPage() {
           ) : list.length === 0 ? (
             <div className="py-16 px-4 text-center">
               {lastError && (lastError.includes("table") || lastError.includes("schema") || lastError.includes("cases")) ? (
-                <div className="max-w-md mx-auto space-y-2">
-                  <p className="text-sm font-medium text-danger-600">DB 연동 오류</p>
-                  <p className="text-xs text-text-muted">{lastError}</p>
-                  <p className="text-xs text-slate-600 mt-2">
-                    Supabase SQL Editor에서 <code className="bg-slate-100 px-1 rounded">supabase/migrations/20260306000001_cases_standalone.sql</code> 파일 내용을 실행해 <code className="bg-slate-100 px-1 rounded">public.cases</code> 테이블을 생성하세요.
-                  </p>
+                <div className="max-w-lg mx-auto text-left space-y-3 p-4 rounded-xl border border-amber-200 bg-amber-50">
+                  <p className="text-sm font-semibold text-amber-800">DB 연동 오류 — public.cases 테이블 없음</p>
+                  <p className="text-xs text-slate-600">{lastError}</p>
+                  <div className="text-xs text-slate-700 space-y-1.5">
+                    <p className="font-medium text-slate-800">해결 방법:</p>
+                    <ol className="list-decimal list-inside space-y-1 ml-1">
+                      <li>Supabase 대시보드 → SQL Editor 열기</li>
+                      <li>프로젝트 루트의 <code className="bg-white px-1 rounded border border-slate-200">supabase/migrations/20260306000001_cases_standalone.sql</code> 파일 내용을 복사</li>
+                      <li>SQL Editor에 붙여넣은 뒤 Run 실행</li>
+                      <li>이 페이지 새로고침</li>
+                    </ol>
+                    <p className="pt-1 text-slate-600">
+                      상세 SQL 및 설명은 <code className="bg-white px-1 rounded border border-slate-200">docs/db/cases-table-setup.md</code> 참고.
+                    </p>
+                  </div>
                 </div>
               ) : (
                 <p className="text-sm text-text-muted">사건이 없습니다. 대량사건엑셀등록 또는 사건 1건 등록을 이용하세요.</p>

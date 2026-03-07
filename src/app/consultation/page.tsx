@@ -15,8 +15,24 @@ import {
   Trash2,
   X,
   User,
+  Phone,
+  FileText,
+  Save,
+  Search,
 } from "lucide-react";
 import { mockConsultations, mockConsultationRooms, mockCases, mockStaff } from "@/lib/mockData";
+import {
+  loadCallMemos,
+  searchCallMemos,
+  saveCallMemo,
+  softDeleteCallMemo,
+  getCallMemoById,
+  loadCallMemoTemplates,
+  saveCallMemoTemplate,
+  type CallMemoItem,
+  type CallMemoTemplate,
+} from "@/lib/callMemoStorage";
+import { findClientByNameAndPhone, saveClient } from "@/lib/clientStorage";
 import type { ConsultationItem, ConsultationRoom, ConsultationStatus, ConsultationConsultant } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -101,6 +117,154 @@ export default function ConsultationPage() {
   const [counselorSearch, setCounselorSearch] = useState("");
   /** 본인 상담 강조 색 */
   const [myHighlightColorId, setMyHighlightColorId] = useState<MyHighlightColorId>("red");
+
+  /** 콜센터 게시판 */
+  const [callMemos, setCallMemos] = useState<CallMemoItem[]>([]);
+  const [selectedCallMemoId, setSelectedCallMemoId] = useState<string | null>(null);
+  const [callForm, setCallForm] = useState({ title: "", callerName: "", phone: "", content: "" });
+  const [callTemplates, setCallTemplates] = useState<CallMemoTemplate[]>([]);
+  const [callTemplateSaveOpen, setCallTemplateSaveOpen] = useState(false);
+  const [callTemplateSaveTitle, setCallTemplateSaveTitle] = useState("");
+  const [callMemoSearchQuery, setCallMemoSearchQuery] = useState("");
+  const [callMemoMonth, setCallMemoMonth] = useState<string>(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [callMemoPage, setCallMemoPage] = useState(1);
+  const CALL_MEMOS_PER_PAGE = 5;
+
+  const refreshCallMemos = () => {
+    setCallMemos(loadCallMemos());
+  };
+  const refreshCallTemplates = () => {
+    setCallTemplates(loadCallMemoTemplates());
+  };
+
+  // 검색 → 월별 그룹 → 해당 월 메모 5개씩 페이지네이션
+  const callMemoSearched = useMemo(() => searchCallMemos(callMemoSearchQuery), [callMemos, callMemoSearchQuery]);
+  const callMemoMonths = useMemo(() => {
+    const map = new Map<string, CallMemoItem[]>();
+    for (const m of callMemoSearched) {
+      const dt = new Date(m.createdAt);
+      const key = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}`;
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(m);
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => b.localeCompare(a))
+      .map(([month, items]) => ({ month, items: items.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()) }));
+  }, [callMemoSearched]);
+  const currentMonthData = useMemo(
+    () => callMemoMonths.find((x) => x.month === callMemoMonth),
+    [callMemoMonths, callMemoMonth]
+  );
+  const currentMonthMemos = currentMonthData?.items ?? [];
+  const callMemoTotalPages = Math.max(1, Math.ceil(currentMonthMemos.length / CALL_MEMOS_PER_PAGE));
+  const callMemoPageSafe = Math.min(callMemoPage, callMemoTotalPages);
+  const callMemoPaginated = useMemo(
+    () => currentMonthMemos.slice((callMemoPageSafe - 1) * CALL_MEMOS_PER_PAGE, callMemoPageSafe * CALL_MEMOS_PER_PAGE),
+    [currentMonthMemos, callMemoPageSafe]
+  );
+
+  useEffect(() => {
+    refreshCallMemos();
+    refreshCallTemplates();
+  }, []);
+
+  useEffect(() => {
+    setCallMemoPage(1);
+  }, [callMemoMonth, callMemoSearchQuery]);
+
+  useEffect(() => {
+    if (callMemoMonths.length > 0 && !callMemoMonths.some((x) => x.month === callMemoMonth)) {
+      setCallMemoMonth(callMemoMonths[0].month);
+    }
+  }, [callMemoMonths, callMemoMonth]);
+
+  const selectCallMemoForEdit = (m: CallMemoItem) => {
+    setSelectedCallMemoId(m.id);
+    setCallForm({ title: m.title, callerName: m.callerName, phone: m.phone, content: m.content });
+  };
+
+  const handleCallMemoRegister = () => {
+    if (!callForm.title.trim()) {
+      toast.error("제목을 입력하세요.");
+      return;
+    }
+    const saved = saveCallMemo({
+      title: callForm.title.trim(),
+      callerName: callForm.callerName.trim(),
+      phone: callForm.phone.trim(),
+      content: callForm.content.trim(),
+    });
+    // 고객관리 게시판에 연동: 이름·연락처로 고객 찾거나 생성 후 메모 ID 연결
+    if (saved.callerName.trim()) {
+      const existing = findClientByNameAndPhone(saved.callerName, saved.phone);
+      const memoIds = [saved.id, ...(existing?.callMemoIds ?? [])];
+      if (existing) {
+        saveClient({ ...existing, callMemoIds: memoIds });
+      } else {
+        saveClient({ name: saved.callerName, phone: saved.phone, mobile: saved.phone, memo: "", callMemoIds: [saved.id] });
+      }
+    }
+    refreshCallMemos();
+    setCallForm({ title: "", callerName: "", phone: "", content: "" });
+    setSelectedCallMemoId(null);
+    toast.success("전화 메모가 등록되었습니다. 고객관리 게시판에 연동되었습니다.");
+  };
+
+  const handleCallMemoEdit = () => {
+    if (!selectedCallMemoId) return;
+    if (!callForm.title.trim()) {
+      toast.error("제목을 입력하세요.");
+      return;
+    }
+    const saved = saveCallMemo({
+      id: selectedCallMemoId,
+      title: callForm.title.trim(),
+      callerName: callForm.callerName.trim(),
+      phone: callForm.phone.trim(),
+      content: callForm.content.trim(),
+    });
+    // 고객관리 연동 갱신
+    if (saved.callerName.trim()) {
+      const existing = findClientByNameAndPhone(saved.callerName, saved.phone);
+      const memoIds = existing?.callMemoIds?.includes(saved.id)
+        ? existing.callMemoIds!
+        : [saved.id, ...(existing?.callMemoIds ?? [])];
+      if (existing) {
+        saveClient({ ...existing, callMemoIds: memoIds });
+      } else {
+        saveClient({ name: saved.callerName, phone: saved.phone, mobile: saved.phone, memo: "", callMemoIds: [saved.id] });
+      }
+    }
+    refreshCallMemos();
+    toast.success("수정되었습니다.");
+  };
+
+  const handleCallMemoDelete = () => {
+    if (!selectedCallMemoId) return;
+    if (!confirm("이 전화 메모를 삭제하시겠습니까? (목록에서만 숨겨집니다.)")) return;
+    softDeleteCallMemo(selectedCallMemoId);
+    refreshCallMemos();
+    setSelectedCallMemoId(null);
+    setCallForm({ title: "", callerName: "", phone: "", content: "" });
+    toast.success("삭제되었습니다.");
+  };
+
+  const applyCallTemplate = (t: CallMemoTemplate) => {
+    setCallForm((p) => ({ ...p, title: p.title || t.title, content: t.content }));
+    toast.success(`"${t.title}" 양식을 불러왔습니다.`);
+  };
+
+  const handleSaveCallTemplate = () => {
+    const title = callTemplateSaveTitle.trim() || callForm.title.trim() || "새 양식";
+    saveCallMemoTemplate({ title, content: callForm.content || "(내용 없음)" });
+    refreshCallTemplates();
+    setCallTemplateSaveOpen(false);
+    setCallTemplateSaveTitle("");
+    toast.success("양식이 저장되었습니다.");
+  };
 
   useEffect(() => {
     fetch("/api/auth/session", { credentials: "include" })
@@ -225,90 +389,76 @@ export default function ConsultationPage() {
         transition={{ duration: 0.2 }}
         className="space-y-5"
       >
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
-              <MessageSquare size={26} className="text-primary-600" />
-              상담관리
-            </h1>
-            <p className="text-sm text-text-muted mt-0.5">
-              상담 일정을 캘린더로 확인하고, 상담실·상담 기록을 등록·편집할 수 있습니다. 연관 사건과 연결하면 해당 사건 메모에 자동 기록됩니다.
-            </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl sm:text-2xl font-bold text-slate-900 flex items-center gap-2">
+            <MessageSquare size={26} className="text-primary-600" />
+            상담관리
+          </h1>
+          <div className="flex gap-1 p-1 bg-slate-100 rounded-xl">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={cn(
+                  "flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium transition-colors",
+                  activeTab === tab.id ? "bg-white text-primary-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                )}
+              >
+                <tab.icon size={16} />
+                {tab.label}
+              </button>
+            ))}
           </div>
-        </div>
-
-        {/* 탭 */}
-        <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors",
-                activeTab === tab.id ? "bg-white text-primary-700 shadow-sm" : "text-slate-600 hover:text-slate-900"
-              )}
-            >
-              <tab.icon size={16} />
-              {tab.label}
-            </button>
-          ))}
         </div>
 
         {/* 스케줄 탭 */}
         {activeTab === "schedule" && (
           <div className="space-y-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 py-2 px-3 rounded-xl bg-slate-50/80 border border-slate-200">
               <div className="flex items-center gap-2">
-                <button onClick={prevDay} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50">
+                <button onClick={prevDay} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 bg-white">
                   <ChevronLeft size={18} />
                 </button>
                 <button onClick={goToday} className="text-sm font-medium text-primary-600 hover:underline px-2">
                   금일
                 </button>
-                <button onClick={nextDay} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50">
+                <button onClick={nextDay} className="w-9 h-9 flex items-center justify-center rounded-lg border border-slate-200 hover:bg-slate-50 bg-white">
                   <ChevronRight size={18} />
                 </button>
                 <span className="text-sm font-medium text-slate-700 ml-2">{viewDate}</span>
               </div>
-              <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => { setEditing(null); setFormOpen(true); }}>
-                상담 등록
-              </Button>
-            </div>
-            <p className="text-xs text-text-muted">
-              예약하기: 빈 칸 더블클릭 · 초록/회색 → 예약가능 · 주황 → 예약내역 (클릭 시 편집)
-            </p>
-            {/* 내 상담 강조 색 + 상담자 검색 */}
-            <div className="flex flex-wrap items-center gap-4 py-2 px-3 rounded-xl bg-slate-50 border border-slate-200">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">내 상담 강조 색:</span>
-                <div className="flex gap-1">
-                  {MY_HIGHLIGHT_COLORS.map(({ id, label, bg }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setMyHighlightColorId(id)}
-                      className={cn(
-                        "w-7 h-7 rounded-lg border-2 transition-all",
-                        myHighlightColorId === id ? "border-slate-800 ring-1 ring-slate-400" : "border-slate-200 hover:border-slate-400",
-                        bg
-                      )}
-                      title={label}
-                      aria-label={label}
-                    />
-                  ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1">
+                    {MY_HIGHLIGHT_COLORS.map(({ id, label, bg }) => (
+                      <button
+                        key={id}
+                        type="button"
+                        onClick={() => setMyHighlightColorId(id)}
+                        className={cn(
+                          "w-7 h-7 rounded-full border-2 transition-all",
+                          myHighlightColorId === id ? "border-slate-800 ring-1 ring-slate-400" : "border-slate-200 hover:border-slate-400",
+                          bg
+                        )}
+                        title={label}
+                        aria-label={label}
+                      />
+                    ))}
+                  </div>
                 </div>
-                <span className="text-2xs text-text-muted">(본인이 담당인 예약)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-medium text-slate-600">상담자 검색:</span>
+                <div className="h-6 w-px bg-slate-200 hidden sm:block" />
                 <input
                   type="text"
                   value={counselorSearch}
                   onChange={(e) => setCounselorSearch(e.target.value)}
-                  placeholder="이름 입력 시 파란색 강조"
-                  className="w-40 px-2 py-1.5 text-sm rounded-lg border border-slate-200 bg-white"
+                  placeholder="상담자 이름"
+                  className="w-32 sm:w-40 px-2.5 py-1.5 text-sm rounded-lg border border-slate-200 bg-white"
+                  aria-label="상담자 검색"
                 />
               </div>
+              <Button size="sm" leftIcon={<Plus size={14} />} onClick={() => { setEditing(null); setFormOpen(true); }}>
+                상담 등록
+              </Button>
             </div>
             <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-x-auto">
               <table className="w-full border-collapse min-w-[800px]">
@@ -511,7 +661,221 @@ export default function ConsultationPage() {
             </div>
           </div>
         )}
+
+        {/* 콜센터 게시판 (전화 메모) - 하단 */}
+        <section className="mt-8 pt-8 border-t border-slate-200">
+          <div className="flex items-center gap-2 mb-4">
+            <Phone size={18} className="text-primary-600" />
+            <h2 className="text-base font-semibold text-slate-800">콜센터 게시판</h2>
+            <span className="text-xs text-text-muted">전화 콜 접수 시 메모를 남기고, 양식을 당겨 쓸 수 있습니다.</span>
+          </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* 좌측: 게시글 신규생성 폼 + 목록 */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden flex flex-col">
+              <div className="p-4 flex-1 flex flex-col gap-4 min-h-0">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">제목</label>
+                    <input
+                      type="text"
+                      value={callForm.title}
+                      onChange={(e) => setCallForm((p) => ({ ...p, title: e.target.value }))}
+                      placeholder="예: 사건 문의"
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-slate-600 mb-1">발신자</label>
+                    <input
+                      type="text"
+                      value={callForm.callerName}
+                      onChange={(e) => setCallForm((p) => ({ ...p, callerName: e.target.value }))}
+                      placeholder="이름"
+                      className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 outline-none"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 mb-1">연락처</label>
+                  <input
+                    type="text"
+                    value={callForm.phone}
+                    onChange={(e) => setCallForm((p) => ({ ...p, phone: e.target.value }))}
+                    placeholder="전화번호"
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 outline-none"
+                  />
+                </div>
+                <div className="flex-1 min-h-0">
+                  <label className="block text-xs font-medium text-slate-600 mb-1">내용</label>
+                  <textarea
+                    value={callForm.content}
+                    onChange={(e) => setCallForm((p) => ({ ...p, content: e.target.value }))}
+                    placeholder="전화 내용을 입력하세요. 우측 양식을 클릭하면 여기로 불러옵니다."
+                    rows={5}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 outline-none resize-y"
+                  />
+                </div>
+                <div className="border-t border-slate-100 pt-3">
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={callMemoSearchQuery}
+                      onChange={(e) => setCallMemoSearchQuery(e.target.value)}
+                      onKeyDown={(e) => e.key === "Enter" && setCallMemoPage(1)}
+                      placeholder="제목·발신자·연락처·내용 검색"
+                      className="flex-1 min-w-[140px] max-w-[200px] px-3 py-2 text-sm border border-slate-200 rounded-lg focus:border-primary-400 outline-none"
+                    />
+                    <Button size="sm" variant="outline" leftIcon={<Search size={14} />} onClick={() => setCallMemoPage(1)}>
+                      검색
+                    </Button>
+                    <Button size="sm" leftIcon={<Save size={14} />} onClick={handleCallMemoRegister}>
+                      등록
+                    </Button>
+                    <Button size="sm" variant="outline" leftIcon={<Pencil size={14} />} onClick={handleCallMemoEdit} disabled={!selectedCallMemoId}>
+                      편집
+                    </Button>
+                    <Button size="sm" variant="outline" className="text-danger-600 hover:bg-danger-50 hover:border-danger-200" leftIcon={<Trash2 size={14} />} onClick={handleCallMemoDelete} disabled={!selectedCallMemoId}>
+                      삭제
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setCallForm({ title: "", callerName: "", phone: "", content: "" }); setSelectedCallMemoId(null); }}
+                      className="text-xs text-slate-500 hover:text-primary-600 ml-auto"
+                    >
+                      새로 쓰기
+                    </button>
+                  </div>
+                  {callMemoMonths.length === 0 ? (
+                    <p className="text-xs text-text-muted py-3">{callMemoSearchQuery.trim() ? "검색 결과가 없습니다." : "등록된 전화 메모가 없습니다."}</p>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {callMemoMonths.map(({ month }) => {
+                          const [y, m] = month.split("-");
+                          const label = `${y}. ${m}`;
+                          return (
+                            <button
+                              key={month}
+                              type="button"
+                              onClick={() => { setCallMemoMonth(month); setCallMemoPage(1); }}
+                              className={cn(
+                                "px-2.5 py-1 text-xs font-medium rounded-lg transition-colors",
+                                callMemoMonth === month ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                              )}
+                            >
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      <div className="space-y-1.5 min-h-[120px]">
+                        {callMemoPaginated.map((m) => (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => selectCallMemoForEdit(m)}
+                            className={cn(
+                              "w-full text-left px-3 py-2 rounded-lg text-sm transition-colors border",
+                              selectedCallMemoId === m.id ? "bg-primary-50 text-primary-800 border-primary-200" : "hover:bg-slate-50 border-slate-100"
+                            )}
+                          >
+                            <span className="font-medium truncate block">{m.title}</span>
+                            <span className="text-xs text-text-muted">
+                              {m.callerName} · {new Date(m.createdAt).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" })}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                      {callMemoTotalPages > 1 && (
+                        <div className="flex items-center justify-center gap-1 mt-2 pt-2 border-t border-slate-100">
+                          <button
+                            type="button"
+                            onClick={() => setCallMemoPage((p) => Math.max(1, p - 1))}
+                            disabled={callMemoPageSafe <= 1}
+                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          {Array.from({ length: callMemoTotalPages }, (_, i) => i + 1).map((n) => (
+                            <button
+                              key={n}
+                              type="button"
+                              onClick={() => setCallMemoPage(n)}
+                              className={cn(
+                                "min-w-[28px] h-7 rounded-lg text-xs font-medium transition-colors",
+                                callMemoPageSafe === n ? "bg-primary-600 text-white" : "text-slate-600 hover:bg-slate-100"
+                              )}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => setCallMemoPage((p) => Math.min(callMemoTotalPages, p + 1))}
+                            disabled={callMemoPageSafe >= callMemoTotalPages}
+                            className="p-1.5 rounded-lg text-slate-600 hover:bg-slate-100 disabled:opacity-40 disabled:pointer-events-none"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* 우측: 양식 (당겨쓰기) */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden flex flex-col">
+              <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/70 flex items-center justify-between">
+                <span className="text-sm font-semibold text-slate-700">작성 양식</span>
+                <Button size="sm" variant="outline" leftIcon={<Plus size={12} />} onClick={() => setCallTemplateSaveOpen(true)}>
+                  양식 저장
+                </Button>
+              </div>
+              <div className="p-3 flex-1 overflow-y-auto">
+                <p className="text-xs text-text-muted mb-3">양식을 클릭하면 좌측 폼으로 내용이 채워집니다.</p>
+                <div className="space-y-2">
+                  {callTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => applyCallTemplate(t)}
+                      className="w-full text-left rounded-xl border border-slate-200 p-3 hover:border-primary-300 hover:bg-primary-50/50 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <FileText size={14} className="text-primary-500 shrink-0" />
+                        <span className="font-medium text-slate-800">{t.title}</span>
+                      </div>
+                      <p className="text-xs text-text-muted mt-1 line-clamp-2">{t.content}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
       </motion.div>
+
+      {/* 양식 저장 모달 */}
+      {callTemplateSaveOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-sm p-4">
+            <h3 className="text-sm font-semibold text-slate-900 mb-2">양식 저장</h3>
+            <input
+              type="text"
+              value={callTemplateSaveTitle}
+              onChange={(e) => setCallTemplateSaveTitle(e.target.value)}
+              placeholder="양식 제목 (비우면 현재 제목 사용)"
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg mb-4"
+            />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={handleSaveCallTemplate}>저장</Button>
+              <Button size="sm" variant="outline" onClick={() => { setCallTemplateSaveOpen(false); setCallTemplateSaveTitle(""); }}>취소</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 상담 등록/편집 폼 모달 */}
       {formOpen && (

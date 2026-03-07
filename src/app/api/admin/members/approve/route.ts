@@ -48,5 +48,42 @@ export async function POST(request: NextRequest) {
     .in("id", targetIds);
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+  // 승인된 회원을 직원(staff) 테이블에 자동 반영 (승인된 계정 = 직원)
+  try {
+  const { data: approvedUsers } = await db
+    .from("site_users")
+    .select("id, login_id, name, role")
+    .in("id", targetIds)
+    .eq("status", "approved");
+
+  if (approvedUsers && approvedUsers.length > 0) {
+    const roleToLevel = (role: string | null): number => {
+      if (!role) return 1;
+      if (role === "임원") return 5;
+      if (role === "변호사") return 3;
+      if (role === "사무장" || role === "국장") return 2;
+      if (role === "인턴") return 0;
+      return 1;
+    };
+    const allowedRoles = ["관리자", "임원", "변호사", "사무장", "국장", "직원", "사무원", "인턴"];
+    const staffRows = approvedUsers.map((u: { id: string; login_id: string; name: string | null; role: string | null }) => ({
+      login_id: u.login_id,
+      name: (u.name && u.name.trim()) || u.login_id,
+      role: (u.role && allowedRoles.includes(u.role)) ? u.role : "직원",
+      department: "",
+      email: null,
+      phone: null,
+      approval_level: roleToLevel(u.role),
+    }));
+    await db.from("staff").upsert(staffRows, {
+      onConflict: "login_id",
+      ignoreDuplicates: true,
+    });
+  }
+  } catch {
+    // staff 테이블에 login_id가 없거나 스키마 미적용 시 무시 (승인은 유지)
+  }
+
   return NextResponse.json({ success: true, count: targetIds.length });
 }

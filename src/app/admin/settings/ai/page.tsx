@@ -10,10 +10,12 @@ const SETTINGS_KEY = "ai_settings";
 
 interface AiSettings {
   geminiApiKey: string;
+  openaiApiKey: string;
 }
 
 const defaults: AiSettings = {
   geminiApiKey: "",
+  openaiApiKey: "",
 };
 
 export default function AdminSettingsAiPage() {
@@ -86,7 +88,7 @@ export default function AdminSettingsAiPage() {
             AI 연동관리
           </h1>
           <p className="text-sm text-text-muted mt-0.5">
-            Gemini API 키를 입력하면 전문 게시판의 판례검색, 법률검색, AI 문서요약·서면작성 등이 동작합니다.
+            Gemini·ChatGPT API 키를 입력하면 전문 게시판 AI 문서엔진(판례검색, 법률검색, 문서요약·서면작성)에서 선택해 사용할 수 있습니다.
           </p>
         </div>
       </div>
@@ -124,10 +126,10 @@ export default function AdminSettingsAiPage() {
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-6 space-y-6">
         <p className="text-sm text-slate-600 bg-primary-50 border border-primary-100 rounded-lg px-3 py-2">
-          <strong>연동 오류가 나는 경우</strong> 아래 Google Gemini API Key 입력란에 키를 넣고 <strong>저장</strong> 버튼을 누르면 해결됩니다.
+          <strong>연동 오류가 나는 경우</strong> 아래 API 키를 입력한 뒤 <strong>저장</strong> 버튼을 누르면 됩니다. 게시판 AI 문서엔진에서 Gemini 또는 ChatGPT 중 선택해 사용할 수 있습니다.
         </p>
         <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">Google Gemini API Key *</label>
+          <label className="block text-sm font-medium text-slate-700 mb-1">Google Gemini API Key</label>
           <input
             type="password"
             value={form.geminiApiKey}
@@ -140,7 +142,24 @@ export default function AdminSettingsAiPage() {
             <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
               Google AI Studio
             </a>
-            에서 API 키를 발급받을 수 있습니다. 저장 후 전문 게시판 → AI·문서 엔진에서 바로 사용됩니다.
+            에서 발급. 저장 후 게시판 → AI·문서 엔진에서 「Gemini」로 사용 가능.
+          </p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">OpenAI (ChatGPT) API Key</label>
+          <input
+            type="password"
+            value={form.openaiApiKey}
+            onChange={(e) => setForm((p) => ({ ...p, openaiApiKey: e.target.value }))}
+            placeholder="sk-... (여기에 키 입력 후 저장)"
+            className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
+            autoComplete="off"
+          />
+          <p className="text-xs text-text-muted mt-1">
+            <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:underline">
+              OpenAI API Keys
+            </a>
+            에서 발급. 저장 후 게시판 → AI·문서 엔진에서 「ChatGPT」로 선택해 사용 가능.
           </p>
         </div>
         <div className="pt-2">

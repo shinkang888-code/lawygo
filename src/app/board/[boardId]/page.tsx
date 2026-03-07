@@ -16,6 +16,7 @@ import {
   FileText,
 } from "lucide-react";
 import { BOARD_LIST } from "@/lib/boardConfig";
+import { getBoardById } from "@/lib/boardStorage";
 import { Button } from "@/components/ui/button";
 import { cn, formatDate } from "@/lib/utils";
 import type { BoardPost } from "@/lib/boardBridge";
@@ -27,10 +28,21 @@ export default function BoardPostsPage({ params }: { params: Promise<{ boardId: 
   const [error, setError] = useState<string | null>(null);
   const [g6Connected, setG6Connected] = useState(false);
   const [search, setSearch] = useState("");
+  const [storedBoard, setStoredBoard] = useState<{ id: string; name: string; description?: string } | null>(null);
 
   useEffect(() => {
     params.then((p) => setBoardId(p.boardId));
   }, [params]);
+
+  useEffect(() => {
+    if (!boardId) return;
+    if (BOARD_LIST.some((b) => b.id === boardId)) {
+      setStoredBoard(null);
+      return;
+    }
+    const b = getBoardById(boardId);
+    setStoredBoard(b && !b.deletedAt ? { id: b.id, name: b.name, description: b.description } : null);
+  }, [boardId]);
 
   useEffect(() => {
     if (!boardId) return;
@@ -56,7 +68,9 @@ export default function BoardPostsPage({ params }: { params: Promise<{ boardId: 
       .finally(() => setLoading(false));
   }, [boardId, search]);
 
-  const board = boardId ? BOARD_LIST.find((b) => b.id === boardId) : null;
+  const board = boardId
+    ? BOARD_LIST.find((b) => b.id === boardId) ?? (storedBoard ? { id: storedBoard.id, name: storedBoard.name, description: storedBoard.description } : null)
+    : null;
 
   return (
     <div className="p-4 sm:p-6 max-w-screen-2xl mx-auto">
@@ -71,7 +85,7 @@ export default function BoardPostsPage({ params }: { params: Promise<{ boardId: 
             href="/board"
             className="flex items-center gap-1.5 text-sm text-text-muted hover:text-primary-600 transition-colors"
           >
-            <ArrowLeft size={16} /> 전문 게시판
+            <ArrowLeft size={16} /> 게시판
           </Link>
         </div>
 

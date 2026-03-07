@@ -1,12 +1,22 @@
 /**
  * 회원가입: 아이디, 비밀번호, 관리번호 저장 → status = pending (관리자 승인 전 대기)
+ * Rate limiting 적용 (브루트포스·스팸 방지)
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseClient";
 import { hashPassword } from "@/lib/authPassword";
+import { checkRateLimit, getClientIdentifier, LIMIT_AUTH_PER_MIN } from "@/lib/rateLimit";
 
 export async function POST(request: NextRequest) {
+  const clientId = getClientIdentifier(request);
+  if (!checkRateLimit(`auth:signup:${clientId}`, LIMIT_AUTH_PER_MIN)) {
+    return NextResponse.json(
+      { error: "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요." },
+      { status: 429 }
+    );
+  }
+
   let body: { loginId?: string; password?: string; managementNumber?: string; name?: string };
   try {
     body = await request.json();

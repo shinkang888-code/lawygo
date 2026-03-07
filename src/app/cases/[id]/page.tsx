@@ -122,7 +122,25 @@ export default function CaseDetailPage() {
 
             <SectionTitle>수임 정보</SectionTitle>
             <InfoItem icon="📅" label="수임일" value={formatDate(caseItem.receivedDate)} />
-            <InfoItem icon="⚖️" label="담당" value={caseItem.assignedStaff} />
+            {/* 담당: 클릭 시 이 사건 상세(타임라인) 새 창 */}
+            <div className="flex gap-2">
+              <span className="text-base flex-shrink-0 mt-0.5">⚖️</span>
+              <div>
+                <div className="text-xs text-text-muted">담당</div>
+                {caseItem.assignedStaff ? (
+                  <Link
+                    href={`/cases/${id}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-medium text-primary-600 hover:underline"
+                  >
+                    {caseItem.assignedStaff}
+                  </Link>
+                ) : (
+                  <div className="text-sm font-medium text-slate-800">-</div>
+                )}
+              </div>
+            </div>
             <div>
               <div className="text-xs text-text-muted mb-1.5">담당 직원</div>
               <StaffChips staffStr={caseItem.assistants} max={4} />

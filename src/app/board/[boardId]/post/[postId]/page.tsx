@@ -11,6 +11,7 @@ import {
   MessageSquare,
   LayoutList,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import { BOARD_LIST } from "@/lib/boardConfig";
 import { Button } from "@/components/ui/button";
@@ -156,7 +157,14 @@ export default function BoardPostPage({
           </div>
         )}
 
-        <div className="flex justify-end">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Link
+            href={`/board/ai/case_search?boardId=${boardId}&postId=${postId}`}
+            className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700"
+          >
+            <Sparkles size={14} />
+            AI 문서엔진에서 이 글 활용 (판례 추천·PDF 요약·준비서면)
+          </Link>
           <Link href={`/board/${boardId}`}>
             <Button variant="outline" size="sm" leftIcon={<LayoutList size={14} />}>
               목록
