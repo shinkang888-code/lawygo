@@ -49,11 +49,11 @@ export async function POST(request: NextRequest) {
       // 파일 없음 → 새로 작성
     }
 
-    const setKeys = new Set(KEYS);
+    const setKeys = new Set<string>(KEYS);
     const updated = lines
       .filter((line) => {
         const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
-        return !match || !setKeys.has(match[1]);
+        return !match || !setKeys.has(match[1] as string);
       })
       .concat(
         pairs.map(([k, v]) => `${k}=${v.replace(/\n/g, " ")}`)
