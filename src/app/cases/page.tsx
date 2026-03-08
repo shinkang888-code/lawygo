@@ -41,6 +41,7 @@ import {
   type CaseFile,
   type CaseFolder,
 } from "@/lib/caseScopedStorage";
+import { uploadCaseFileToDrive, getDriveFileBlobUrl } from "@/lib/caseFileStorage";
 import { StatusBadge, DDayBadge, ElectronicBadge, ImmutableBadge } from "@/components/ui/badge";
 import { StaffChips } from "@/components/cases/StaffChips";
 import { FilterTray } from "@/components/cases/FilterTray";
@@ -1019,16 +1020,50 @@ function CaseDocumentsPanel({
   const [newFolderName, setNewFolderName] = useState("");
   const [editingFileId, setEditingFileId] = useState<string | null>(null);
   const [editingFileName, setEditingFileName] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null);
 
   const FILE_DRAG_TYPE = "application/x-lawygo-file-id";
 
   useEffect(() => {
     setPreview(null);
+    setPreviewBlobUrl(null);
     setCurrentFolderId(null);
     setEditingFolderId(null);
     setEditingFileId(null);
     setEditingFileName("");
   }, [caseItem?.id]);
+
+  useEffect(() => {
+    if (!preview) {
+      setPreviewBlobUrl(null);
+      return;
+    }
+    if (preview.url) {
+      setPreviewBlobUrl(null);
+      return;
+    }
+    if (!preview.driveFileId) {
+      setPreviewBlobUrl(null);
+      return;
+    }
+    let cancelled = false;
+    getDriveFileBlobUrl(preview.driveFileId)
+      .then((url) => {
+        if (!cancelled) setPreviewBlobUrl(url);
+        else URL.revokeObjectURL(url);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewBlobUrl(null);
+      });
+    return () => {
+      cancelled = true;
+      setPreviewBlobUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, [preview?.id, preview?.driveFileId, preview?.url]);
 
   if (!caseItem) {
     return (
@@ -1045,7 +1080,44 @@ function CaseDocumentsPanel({
   const rootFiles = files.filter((f) => !f.folderId);
   const folderFiles = currentFolderId ? files.filter((f) => f.folderId === currentFolderId) : rootFiles;
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+  const addFilesViaDrive = async (fileList: File[]) => {
+    if (!onFilesChange || !caseItem) return;
+    setIsUploading(true);
+    const added: CaseFile[] = [];
+    let failed = 0;
+    for (const f of fileList) {
+      try {
+        const result = await uploadCaseFileToDrive(caseItem.id, f);
+        if (result) {
+          added.push({
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            fileName: result.name,
+            fileSize: result.size,
+            mimeType: result.mimeType,
+            url: "",
+            driveFileId: result.fileId,
+            folderId: currentFolderId ?? undefined,
+          });
+        } else {
+          failed++;
+        }
+      } catch (err) {
+        failed++;
+      }
+    }
+    if (added.length > 0) {
+      onFilesChange([...added, ...files]);
+      toast.success(`${added.length}개 파일이 Drive에 추가되었습니다.`);
+    }
+    if (failed > 0 && added.length === 0) {
+      toast.error("파일 추가에 실패했습니다. 로그인 및 Drive 연동을 확인하세요.");
+    } else if (failed > 0 && added.length > 0) {
+      toast.warning(`${added.length}개 추가, ${failed}개 실패 (로그인 및 Drive 연동 확인)`);
+    }
+    setIsUploading(false);
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragOver(false);
     const fileId = e.dataTransfer.getData(FILE_DRAG_TYPE);
@@ -1056,34 +1128,14 @@ function CaseDocumentsPanel({
     if (!onFilesChange) return;
     const dropped = Array.from(e.dataTransfer.files);
     if (dropped.length === 0) return;
-    const mapped: CaseFile[] = dropped.map((f) => ({
-      id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      fileName: f.name,
-      fileSize: f.size,
-      mimeType: f.type || "application/octet-stream",
-      url: URL.createObjectURL(f),
-      local: true,
-      folderId: currentFolderId ?? undefined,
-    }));
-    onFilesChange([...mapped, ...files]);
-    toast.success(`${dropped.length}개 파일이 추가되었습니다.`);
+    await addFilesViaDrive(dropped);
   };
 
-  const handleBrowse = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBrowse = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!onFilesChange) return;
     const selected = Array.from(e.target.files ?? []);
     if (selected.length === 0) return;
-    const mapped: CaseFile[] = selected.map((f) => ({
-      id: `file-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      fileName: f.name,
-      fileSize: f.size,
-      mimeType: f.type || "application/octet-stream",
-      url: URL.createObjectURL(f),
-      local: true,
-      folderId: currentFolderId ?? undefined,
-    }));
-    onFilesChange([...mapped, ...files]);
-    toast.success(`${selected.length}개 파일이 추가되었습니다.`);
+    await addFilesViaDrive(selected);
     e.target.value = "";
   };
 
@@ -1119,13 +1171,27 @@ function CaseDocumentsPanel({
     toast.success("파일을 이동했습니다.");
   };
 
-  const openViewerInNewWindow = (file: CaseFile) => {
+  const openViewerInNewWindow = async (file: CaseFile) => {
     try {
+      let url = file.url;
+      if (file.driveFileId && !url) {
+        try {
+          url = await getDriveFileBlobUrl(file.driveFileId);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "Drive 다운로드 실패";
+          toast.error(msg);
+          return;
+        }
+      }
+      if (!url) {
+        toast.error("파일을 열 수 없습니다.");
+        return;
+      }
       // 새 창은 sessionStorage를 공유하지 않으므로 localStorage로 전달
       localStorage.setItem(
         "lawygo_viewer",
         JSON.stringify({
-          url: file.url,
+          url,
           fileName: file.fileName,
           mimeType: file.mimeType ?? "",
         })
@@ -1312,10 +1378,14 @@ function CaseDocumentsPanel({
             )}
           >
             <span className="text-slate-600">
-              파일을 끌어다 놓거나 버튼으로 추가하세요. <span className="text-primary-600 font-medium">파일 행을 좌측 폴더로 드래그하면 이동됩니다.</span>
+              {isUploading ? "Drive에 업로드 중..." : "파일을 끌어다 놓거나 버튼으로 추가하세요."}{" "}
+              {!isUploading && <span className="text-primary-600 font-medium">파일 행을 좌측 폴더로 드래그하면 이동됩니다.</span>}
             </span>
             {canEdit && (
-              <label className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-xs cursor-pointer hover:bg-slate-50">
+              <label className={cn(
+                "inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-white border border-slate-200 text-xs cursor-pointer hover:bg-slate-50",
+                isUploading && "pointer-events-none opacity-60"
+              )}>
                 <Upload size={13} className="text-slate-500" />
                 파일 선택
                 <input type="file" multiple className="hidden" onChange={handleBrowse} />
@@ -1424,11 +1494,18 @@ function CaseDocumentsPanel({
           <div className="flex-1 flex items-center justify-center bg-slate-50 text-[11px] text-text-muted px-2 min-h-0">
             {preview ? (
               preview.mimeType?.includes("pdf") ? (
-                <iframe
-                  src={preview.url}
-                  title={preview.fileName}
-                  className="w-full h-full rounded-md border border-slate-200 bg-white min-h-[120px]"
-                />
+                (preview.url || previewBlobUrl) ? (
+                  <iframe
+                    src={(preview.url || previewBlobUrl) ?? ""}
+                    title={preview.fileName}
+                    className="w-full h-full rounded-md border border-slate-200 bg-white min-h-[120px]"
+                  />
+                ) : (
+                  <div className="text-center">
+                    <p className="font-medium mb-1 truncate">{preview.fileName}</p>
+                    <p>로딩 중...</p>
+                  </div>
+                )
               ) : (
                 <div className="text-center">
                   <p className="font-medium mb-1 truncate">{preview.fileName}</p>

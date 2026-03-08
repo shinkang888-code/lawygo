@@ -104,7 +104,11 @@ export async function POST(request: NextRequest) {
       const code = data.code ?? String(res.status);
 
       if (!res.ok) {
-        results.push({ phone, success: false, error: data.result?.detail_message ?? data.result ?? res.statusText });
+        const err: string | undefined =
+          typeof data.result === "string"
+            ? data.result
+            : (data.result as { detail_message?: string } | undefined)?.detail_message ?? res.statusText;
+        results.push({ phone, success: false, error: err });
         continue;
       }
       if (code !== "200" && code !== "100") {

@@ -14,6 +14,8 @@ const STORAGE_KEYS = {
 export interface CaseFile extends TimelineAttachment {
   local?: boolean;
   folderId?: string | null;
+  /** Drive 저장 시 파일 ID (메타만 localStorage) */
+  driveFileId?: string;
 }
 
 export interface CaseFolder {
