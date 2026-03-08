@@ -1,8 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { User, FileText, Paperclip, X, Send, Eye } from "lucide-react";
-import { mockStaff } from "@/lib/mockData";
 import type { StaffMember, ApprovalDoc, ApprovalStep } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
@@ -25,6 +24,9 @@ function getCurrentAccountNameFromCookie(): string {
 export default function ApprovalDraftPage() {
   const [drafterName, setDrafterName] = useState<string>("");
   const [drafterId, setDrafterId] = useState<string>("");
+  const [drafterLoginId, setDrafterLoginId] = useState<string>("");
+  const [staffList, setStaffList] = useState<StaffMember[]>([]);
+  const [staffLoaded, setStaffLoaded] = useState(false);
   const [firstApprovers, setFirstApprovers] = useState<StaffMember[]>([]);
   const [secondApprovers, setSecondApprovers] = useState<StaffMember[]>([]);
   const [referrers, setReferrers] = useState<StaffMember[]>([]);
@@ -40,6 +42,7 @@ export default function ApprovalDraftPage() {
       if (!u) return;
       setDrafterName(u.name || u.loginId || "");
       setDrafterId(u.id ?? u.userId ?? "me");
+      setDrafterLoginId(u.loginId ?? "");
     }
     fetch("/api/auth/me", { credentials: "include" })
       .then((r) => (r.ok ? r.json() : null))
@@ -50,41 +53,59 @@ export default function ApprovalDraftPage() {
           .then((s) => s?.user && apply(s.user));
       })
       .catch(() => {
-        const name = (getCurrentAccountNameFromCookie() || mockStaff[1]?.name) ?? "기안자";
-        setDrafterName(name);
+        setDrafterName(getCurrentAccountNameFromCookie() || "기안자");
       });
   }, []);
 
-  const defaultStaff: StaffMember = useMemo(
-    () => mockStaff[1] ?? mockStaff[0] ?? { id: "me", name: "기안자", role: "직원", department: "-", email: "", phone: "", level: 1 },
-    []
-  );
+  useEffect(() => {
+    fetch("/api/staff", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json().catch(() => ({})) as Promise<{ staff?: StaffMember[] }>)
+      .then((d) => {
+        setStaffLoaded(true);
+        setStaffList(Array.isArray(d?.staff) ? d.staff : []);
+      })
+      .catch(() => setStaffLoaded(true));
+  }, []);
 
   const currentUser: StaffMember = useMemo(() => {
-    const name = (drafterName || getCurrentAccountNameFromCookie() || defaultStaff.name) ?? "기안자";
-    const found = mockStaff.find((s) => s.name === name);
-    return found ? { ...found, name } : { ...defaultStaff, id: drafterId || "me", name };
-  }, [drafterName, drafterId, defaultStaff]);
+    const name = drafterName || getCurrentAccountNameFromCookie() || "기안자";
+    return {
+      id: drafterId || "me",
+      name,
+      role: "직원",
+      department: "",
+      email: "",
+      phone: "",
+      level: 1,
+      loginId: drafterLoginId || undefined,
+    };
+  }, [drafterName, drafterId, drafterLoginId]);
+
+  const isCurrentUser = useCallback(
+    (s: StaffMember) => s.id === currentUser.id || (currentUser.loginId && s.loginId === currentUser.loginId),
+    [currentUser.id, currentUser.loginId]
+  );
 
   const staffWithoutSelf = useMemo(
-    () => mockStaff.filter((s) => s.id !== currentUser.id),
-    [currentUser.id]
+    () => staffList.filter((s) => !isCurrentUser(s)),
+    [staffList, isCurrentUser]
   );
 
   const departments = useMemo(
-    () => Array.from(new Set(mockStaff.map((s) => s.department).filter(Boolean))).sort(),
-    []
+    () => Array.from(new Set(staffList.map((s) => s.department).filter(Boolean))).sort(),
+    [staffList]
   );
 
-  const filterStaff = (list: StaffMember[], q: string) =>
-    !q.trim()
-      ? list
-      : list.filter(
-          (s) =>
-            s.name.includes(q.trim()) ||
-            s.department.includes(q.trim()) ||
-            s.role.includes(q.trim())
-        );
+  const filterStaff = useCallback((list: StaffMember[], q: string) => {
+    const t = q.trim().toLowerCase();
+    if (!t) return list;
+    return list.filter(
+      (s) =>
+        (s.name && s.name.toLowerCase().includes(t)) ||
+        (s.department && s.department.toLowerCase().includes(t)) ||
+        (s.role && s.role.toLowerCase().includes(t))
+    );
+  }, []);
 
   const firstIds = useMemo(() => new Set(firstApprovers.map((s) => s.id)), [firstApprovers]);
   const secondIds = useMemo(() => new Set(secondApprovers.map((s) => s.id)), [secondApprovers]);
@@ -253,7 +274,7 @@ export default function ApprovalDraftPage() {
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-50 border border-primary-200 rounded-lg text-sm"
                       >
                         <span className="font-medium text-slate-800">{s.name}</span>
-                        <span className="text-xs text-text-muted">{s.role}·{s.department}</span>
+                        <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                         <button type="button" onClick={() => removeFirstApprover(s.id)} className="text-slate-400 hover:text-danger-500 p-0.5" aria-label="제거">
                           <X size={12} />
                         </button>
@@ -262,14 +283,18 @@ export default function ApprovalDraftPage() {
                   </div>
                 )}
                 <div className="max-h-[4.5rem] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                  {firstFiltered.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-text-muted text-center">직원·변호사 중 검색 또는 선택 (여러 명 가능)</div>
+                  {!staffLoaded ? (
+                    <div className="px-3 py-3 text-xs text-text-muted text-center">직원 목록 불러오는 중…</div>
+                  ) : firstFiltered.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-text-muted text-center">
+                      {firstSearch.trim() ? "검색 결과가 없습니다." : staffWithoutSelf.length === 0 ? "승인된 직원이 없습니다." : "이름 또는 부서로 검색 후 선택 (여러 명 가능)"}
+                    </div>
                   ) : (
                     firstFiltered.map((s) => (
                       <button key={s.id} type="button" onClick={() => addFirstApprover(s)} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50">
                         <User size={14} className="text-slate-400 shrink-0" />
                         <span className="font-medium text-slate-800">{s.name}</span>
-                        <span className="text-xs text-text-muted">{s.role} · {s.department}</span>
+                        <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                       </button>
                     ))
                   )}
@@ -296,7 +321,7 @@ export default function ApprovalDraftPage() {
                         className="inline-flex items-center gap-1 px-2.5 py-1.5 bg-primary-50 border border-primary-200 rounded-lg text-sm"
                       >
                         <span className="font-medium text-slate-800">{s.name}</span>
-                        <span className="text-xs text-text-muted">{s.role}·{s.department}</span>
+                        <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                         <button type="button" onClick={() => removeSecondApprover(s.id)} className="text-slate-400 hover:text-danger-500 p-0.5" aria-label="제거">
                           <X size={12} />
                         </button>
@@ -305,14 +330,18 @@ export default function ApprovalDraftPage() {
                   </div>
                 )}
                 <div className="max-h-[4.5rem] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
-                  {secondFiltered.length === 0 ? (
-                    <div className="px-3 py-3 text-xs text-text-muted text-center">직원·변호사 중 검색 또는 선택 (여러 명 가능)</div>
+                  {!staffLoaded ? (
+                    <div className="px-3 py-3 text-xs text-text-muted text-center">직원 목록 불러오는 중…</div>
+                  ) : secondFiltered.length === 0 ? (
+                    <div className="px-3 py-3 text-xs text-text-muted text-center">
+                      {secondSearch.trim() ? "검색 결과가 없습니다." : staffWithoutSelf.length === 0 ? "승인된 직원이 없습니다." : "이름 또는 부서로 검색 후 선택 (여러 명 가능)"}
+                    </div>
                   ) : (
                     secondFiltered.map((s) => (
                       <button key={s.id} type="button" onClick={() => addSecondApprover(s)} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50">
                         <User size={14} className="text-slate-400 shrink-0" />
                         <span className="font-medium text-slate-800">{s.name}</span>
-                        <span className="text-xs text-text-muted">{s.role} · {s.department}</span>
+                        <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                       </button>
                     ))
                   )}
@@ -341,7 +370,7 @@ export default function ApprovalDraftPage() {
                     >
                       <Eye size={14} className="text-slate-400" />
                       <span className="font-medium text-slate-800">{s.name}</span>
-                      <span className="text-xs text-text-muted">{s.role}·{s.department}</span>
+                      <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                       <button type="button" onClick={() => removeReferrer(s.id)} className="text-slate-400 hover:text-danger-500 p-0.5" aria-label="제거">
                         <X size={12} />
                       </button>
@@ -352,8 +381,10 @@ export default function ApprovalDraftPage() {
               <div className="max-h-[7rem] overflow-y-auto border border-slate-200 rounded-lg divide-y divide-slate-100">
                 {!referrerSearch.trim() ? (
                   <div className="px-3 py-3 text-xs text-text-muted text-center">
-                    부서명을 입력하면 부서별 일괄 선택이 나옵니다. 선택 시 해당 부서 전원이 참조자로 등록됩니다.
+                    {!staffLoaded ? "직원 목록 불러오는 중…" : "부서명 또는 이름을 입력하면 부서별 일괄 선택·개별 직원 선택이 나옵니다."}
                   </div>
+                ) : !staffLoaded ? (
+                  <div className="px-3 py-3 text-xs text-text-muted text-center">직원 목록 불러오는 중…</div>
                 ) : (
                   <>
                     {referrerDepartmentsFiltered.map((dept) => {
@@ -386,7 +417,7 @@ export default function ApprovalDraftPage() {
                           <button key={s.id} type="button" onClick={() => addReferrer(s)} className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50">
                             <Eye size={14} className="text-slate-400 shrink-0" />
                             <span className="font-medium text-slate-800">{s.name}</span>
-                            <span className="text-xs text-text-muted">{s.role} · {s.department}</span>
+                            <span className="text-xs text-text-muted">{[s.role, s.department].filter(Boolean).join(" · ") || "직원"}</span>
                           </button>
                         ))}
                       </>

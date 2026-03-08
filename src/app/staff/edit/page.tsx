@@ -212,7 +212,7 @@ export default function StaffEditPage() {
         window.opener.postMessage({ type: "STAFF_REFRESH" }, window.location.origin);
       }
       setStaff(updated);
-      toast.success("저장되었습니다.");
+      toast.success("DB에 저장되었습니다.");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "저장에 실패했습니다.");
     } finally {
@@ -251,17 +251,28 @@ export default function StaffEditPage() {
   return (
     <div className="min-h-screen bg-slate-50 pb-24">
       <div className="max-w-lg mx-auto px-4 pt-6">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between gap-3 mb-4">
           <h1 className="text-lg font-bold text-slate-900">직원 정보 편집</h1>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={() => window.close()}
-            className="text-slate-500"
-          >
-            닫기
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              leftIcon={saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              onClick={handleSave}
+              disabled={saving || !form.id}
+            >
+              {saving ? "저장 중…" : "저장"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => window.close()}
+              className="text-slate-500"
+            >
+              닫기
+            </Button>
+          </div>
         </div>
 
         <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">

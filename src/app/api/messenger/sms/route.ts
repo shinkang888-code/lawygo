@@ -66,7 +66,8 @@ export async function POST(request: NextRequest) {
     receiver: receiver.join(","),
     msg: message,
   });
-  if (new Blob([message]).size > 90) {
+  const msgBytes = new TextEncoder().encode(message).length;
+  if (msgBytes > 90) {
     form.set("msg_type", "LMS");
     form.set("title", message.slice(0, 30));
   }
@@ -77,11 +78,27 @@ export async function POST(request: NextRequest) {
       headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
       body: form.toString(),
     });
-    const data = await res.json().catch(() => ({}));
+    const rawText = await res.text();
+    let data: { result_code?: number; message?: string; msg_id?: number; success_cnt?: number; error_cnt?: number } = {};
+    try {
+      data = JSON.parse(rawText);
+    } catch {
+      console.error("[SMS] 알리고 응답이 JSON이 아님:", rawText?.slice(0, 500));
+      return NextResponse.json(
+        { error: "알리고 서버 응답 오류", detail: rawText?.slice(0, 300) },
+        { status: 502 }
+      );
+    }
     const resultCode = Number(data.result_code);
     if (resultCode < 1) {
+      const errMsg = data.message || "알리고 발송 실패";
+      console.error("[SMS] 알리고 실패:", resultCode, errMsg, data);
+      const hint =
+        resultCode === -101
+          ? " (API 키·발신번호 확인 및 알리고 관리자 > 연동형 API > 발송 IP 등록 필요)"
+          : "";
       return NextResponse.json(
-        { error: data.message || "알리고 발송 실패", detail: data },
+        { error: errMsg + hint, result_code: resultCode, detail: data },
         { status: 502 }
       );
     }
@@ -92,9 +109,8 @@ export async function POST(request: NextRequest) {
       error_cnt: data.error_cnt,
     });
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : "알리고 API 요청 실패" },
-      { status: 502 }
-    );
+    const errMsg = e instanceof Error ? e.message : "알리고 API 요청 실패";
+    console.error("[SMS] fetch 예외:", errMsg, e);
+    return NextResponse.json({ error: errMsg }, { status: 502 });
   }
 }

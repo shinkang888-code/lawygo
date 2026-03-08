@@ -34,7 +34,7 @@ function useCurrentUser(): { id: string; name: string; loginId: string } {
   useEffect(() => {
     function apply(u: { id?: string; userId?: string; name?: string; loginId?: string } | null) {
       if (!u) return;
-      const id = u.id ?? u.userId ?? "";
+      const id = String(u.id ?? u.userId ?? "");
       const name = u.name || u.loginId || "나";
       const loginId = u.loginId ?? "";
       setUser({ id, name, loginId });
@@ -67,7 +67,7 @@ export default function InternalMessengerPage() {
   const [staffLoaded, setStaffLoaded] = useState(false);
   const [sentList, setSentList] = useState<InternalMessage[]>([]);
   const [receivedList, setReceivedList] = useState<InternalMessage[]>([]);
-  const [recipients, setRecipients] = useState<{ id: string; name: string }[]>([]);
+  const [recipients, setRecipients] = useState<{ id: string; name: string; loginId?: string }[]>([]);
   const [recipientSearch, setRecipientSearch] = useState("");
   const [body, setBody] = useState("");
   const [files, setFiles] = useState<{ file: File; data: string }[]>([]);
@@ -86,8 +86,8 @@ export default function InternalMessengerPage() {
 
   const refresh = useCallback(() => {
     setSentList(loadSentMessages(currentUser.id));
-    setReceivedList(loadReceivedMessages(currentUser.id));
-  }, [currentUser.id]);
+    setReceivedList(loadReceivedMessages(currentUser.id, currentUser.loginId));
+  }, [currentUser.id, currentUser.loginId]);
 
   useEffect(() => {
     refresh();
@@ -111,9 +111,9 @@ export default function InternalMessengerPage() {
       )
     : staffOptions.filter((s) => !recipientIds.has(s.id));
 
-  const addRecipient = (id: string, name: string) => {
+  const addRecipient = (id: string, name: string, loginId?: string) => {
     if (recipientIds.has(id)) return;
-    setRecipients((prev) => [...prev, { id, name }]);
+    setRecipients((prev) => [...prev, { id, name, loginId }]);
     setRecipientSearch("");
   };
   const removeRecipient = (id: string) => {
@@ -160,6 +160,7 @@ export default function InternalMessengerPage() {
         senderName: currentUser.name,
         recipientId: r.id,
         recipientName: r.name,
+        recipientLoginId: r.loginId,
         body: body.trim(),
         ...attachmentPayload,
       });
@@ -265,7 +266,7 @@ export default function InternalMessengerPage() {
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() => addRecipient(s.id, s.name)}
+                        onClick={() => addRecipient(s.id, s.name, s.loginId)}
                         className="w-full flex items-center gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
                       >
                         <User size={14} className="text-slate-400 shrink-0" />
@@ -384,13 +385,22 @@ export default function InternalMessengerPage() {
                   {receivedList.map((m) => {
                     const isExpanded = expandedReceivedId === m.id;
                     const fullMsg = isExpanded ? getMessageById(m.id) : m;
+                    const openChat = () => {
+                      if (!m.senderId) return;
+                      markAsRead(m.id);
+                      refresh();
+                      const url = `/internal-messenger/chat?with=${encodeURIComponent(m.senderId)}&name=${encodeURIComponent(m.senderName)}`;
+                      window.open(url, "_blank", "width=420,height=700,scrollbars=yes,resizable=yes");
+                    };
                     return (
                       <li
                         key={m.id}
+                        onDoubleClick={openChat}
                         className={cn(
-                          "rounded-xl border transition-colors",
+                          "rounded-xl border transition-colors cursor-pointer",
                           isExpanded ? "border-primary-200 bg-primary-50/50" : "border-slate-100 hover:border-slate-200"
                         )}
+                        title="더블클릭: 1:1 채팅창 열기"
                       >
                         <button
                           type="button"

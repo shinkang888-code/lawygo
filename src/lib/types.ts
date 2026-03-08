@@ -305,6 +305,8 @@ export interface InternalMessage {
   senderName: string;
   recipientId: string;
   recipientName: string;
+  /** 수신자 로그인 ID (수신 목록 연동 시 id 불일치 시 fallback) */
+  recipientLoginId?: string;
   body: string;
   /** 첨부 파일명 목록 */
   attachmentNames: string[];

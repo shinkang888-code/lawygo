@@ -125,8 +125,11 @@ export default function AdminSettingsMessengerPage() {
             />
           </div>
         ))}
-        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600">
-          필요한 항목만 입력하면 됩니다. 알리고(문자)와 카카오톡은 메신저 페이지에서 이미 선택 가능하며, 나머지 채널은 추후 발송 UI에 연동됩니다. 환경 변수(ALIGO_KEY 등)보다 여기 저장값이 우선 사용됩니다.
+        <div className="rounded-lg bg-slate-50 border border-slate-200 p-3 text-xs text-slate-600 space-y-1">
+          <p>필요한 항목만 입력하면 됩니다. 알리고(문자)와 카카오톡은 메신저 페이지에서 이미 선택 가능하며, 나머지 채널은 추후 발송 UI에 연동됩니다. 환경 변수(ALIGO_KEY 등)보다 여기 저장값이 우선 사용됩니다.</p>
+          <p className="text-amber-700 mt-1">
+            <strong>알리고 인증오류(-101) 시:</strong> 알리고 관리자 &gt; 연동형 API &gt; 발송 IP에 <strong>현재 서버(또는 Vercel)의 발송 IP</strong>를 등록해야 합니다. 미등록 IP에서는 발송이 차단됩니다.
+          </p>
         </div>
         <div className="pt-2">
           <Button onClick={handleSave} disabled={saving} leftIcon={<Save size={16} />}>

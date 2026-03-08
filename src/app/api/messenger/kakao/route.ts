@@ -69,30 +69,46 @@ export async function POST(request: NextRequest) {
 
   const results: { phone: string; success: boolean; error?: string }[] = [];
 
+  const senderNo = process.env.KAKAO_BIZ_SENDER_NO ?? "";
+  if (!senderNo.trim()) {
+    return NextResponse.json(
+      { error: "발신 번호가 설정되지 않았습니다. KAKAO_BIZ_SENDER_NO 환경 변수 또는 카카오 비즈 계약 발신번호를 설정하세요." },
+      { status: 503 }
+    );
+  }
+
   for (const phone of phones) {
     try {
-      const payload: Record<string, string> = {
+      const cid = process.env.KAKAO_BIZ_CID ?? `lawygo-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+      const payload: Record<string, unknown> = {
         message_type: "AT",
         sender_key: senderKey,
+        cid,
         phone_number: phone,
-        sender_no: process.env.KAKAO_BIZ_SENDER_NO ?? "",
+        sender_no: senderNo,
         message,
+        fall_back_yn: false,
       };
       if (templateCode) payload.template_code = templateCode;
-      if (process.env.KAKAO_BIZ_CID) payload.cid = process.env.KAKAO_BIZ_CID;
 
       const res = await fetch(sendUrl, {
         method: "POST",
         headers: {
+          accept: "*/*",
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),
       });
-      const data = await res.json().catch(() => ({}));
+      const data = (await res.json().catch(() => ({}))) as { code?: string; result?: { detail_message?: string } };
+      const code = data.code ?? String(res.status);
 
       if (!res.ok) {
-        results.push({ phone, success: false, error: data.message ?? res.statusText });
+        results.push({ phone, success: false, error: data.result?.detail_message ?? data.result ?? res.statusText });
+        continue;
+      }
+      if (code !== "200" && code !== "100") {
+        results.push({ phone, success: false, error: data.result?.detail_message ?? `코드 ${code}` });
         continue;
       }
       results.push({ phone, success: true });

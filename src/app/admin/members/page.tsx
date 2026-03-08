@@ -49,6 +49,7 @@ export default function AdminMembersPage() {
   const [editRole, setEditRole] = useState("");
   const [editManagementNumber, setEditManagementNumber] = useState("");
   const [editNewPassword, setEditNewPassword] = useState("");
+  const [editNewPasswordConfirm, setEditNewPasswordConfirm] = useState("");
   const [editLoading, setEditLoading] = useState(false);
 
   const [excelErrors, setExcelErrors] = useState<ExcelRowError[]>([]);
@@ -244,6 +245,7 @@ export default function AdminMembersPage() {
     setEditRole(m.role ?? ROLE_OPTIONS[0]);
     setEditManagementNumber(m.management_number ?? "");
     setEditNewPassword("");
+    setEditNewPasswordConfirm("");
   };
 
   const handleEditSave = async () => {
@@ -270,14 +272,26 @@ export default function AdminMembersPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "수정 실패");
 
-      if (editNewPassword.trim().length >= 4) {
+      const newPw = editNewPassword.trim();
+      const newPwConfirm = editNewPasswordConfirm.trim();
+      if (newPw.length > 0) {
+        if (newPw.length < 4) {
+          toast.error("새 비밀번호는 4자 이상 입력하세요.");
+          setEditLoading(false);
+          return;
+        }
+        if (newPw !== newPwConfirm) {
+          toast.error("새 비밀번호와 확인이 일치하지 않습니다.");
+          setEditLoading(false);
+          return;
+        }
         const credRes = await fetch("/api/admin/members/credentials", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
             loginId: newLoginId,
-            newPassword: editNewPassword.trim(),
+            newPassword: newPw,
           }),
         });
         if (!credRes.ok) {
@@ -652,12 +666,29 @@ export default function AdminMembersPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-600 mb-1">비밀번호 변경 (선택, 4자 이상)</label>
+                <label className="block text-xs font-medium text-slate-600 mb-1">기존 비밀번호</label>
+                <div className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg bg-slate-50 text-slate-500 select-none">
+                  ••••••••
+                </div>
+                <p className="mt-1 text-xs text-slate-400">보안상 저장된 비밀번호는 표시되지 않습니다.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">새 비밀번호 (선택, 4자 이상)</label>
                 <input
                   type="password"
                   value={editNewPassword}
                   onChange={(e) => setEditNewPassword(e.target.value)}
                   placeholder="변경 시에만 입력"
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">새 비밀번호 확인</label>
+                <input
+                  type="password"
+                  value={editNewPasswordConfirm}
+                  onChange={(e) => setEditNewPasswordConfirm(e.target.value)}
+                  placeholder="새 비밀번호 다시 입력"
                   className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
                 />
               </div>
