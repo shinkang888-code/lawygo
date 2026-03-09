@@ -10,7 +10,27 @@ function getDb() {
   return getSupabaseAdmin();
 }
 
+function toBool(v: unknown): boolean {
+  if (v === undefined || v === null) return false;
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  const s = String(v).trim().toUpperCase();
+  return s === "Y" || s === "YES" || s === "O" || s === "1" || s === "TRUE" || s === "예" || s === "ELEC";
+}
+
+function toDateString(v: unknown): string {
+  if (v === undefined || v === null) return new Date().toISOString().slice(0, 10);
+  if (typeof v === "number" && v > 10000) {
+    const d = new Date((v - 25569) * 86400 * 1000);
+    return d.toISOString().slice(0, 10);
+  }
+  const s = String(v).trim();
+  if (s.length >= 10) return s.slice(0, 10);
+  return new Date().toISOString().slice(0, 10);
+}
+
 function toRow(item: Record<string, unknown>) {
+  const receivedRaw = item.receivedDate ?? item.received_date;
   return {
     case_number: String(item.caseNumber ?? item.case_number ?? "").trim() || "미등록",
     case_type: String(item.caseType ?? item.case_type ?? "민사").trim() || "민사",
@@ -22,13 +42,13 @@ function toRow(item: Record<string, unknown>) {
     status: item.status ?? "진행중",
     assigned_staff_name: String(item.assignedStaff ?? item.assigned_staff_name ?? "").trim() || "미배정",
     assistants: (item.assistants ?? "") as string,
-    received_date: item.receivedDate ?? item.received_date ?? new Date().toISOString().slice(0, 10),
+    received_date: toDateString(receivedRaw),
     amount: Number(item.amount ?? 0),
     received_amount: Number(item.receivedAmount ?? item.received_amount ?? 0),
     pending_amount: Number(item.pendingAmount ?? item.pending_amount ?? 0),
-    is_electronic: Boolean(item.isElectronic ?? item.is_electronic),
-    is_urgent: Boolean(item.isUrgent ?? item.is_urgent),
-    is_immutable_deadline: Boolean(item.isImmutable ?? item.is_immutable_deadline),
+    is_electronic: toBool(item.isElectronic ?? item.is_electronic),
+    is_urgent: toBool(item.isUrgent ?? item.is_urgent),
+    is_immutable_deadline: toBool(item.isImmutable ?? item.is_immutable_deadline),
     notes: (item.notes ?? "") as string,
   };
 }
@@ -88,7 +108,29 @@ export async function GET(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 400 });
   }
-  return NextResponse.json({ data: (data ?? []).map(fromRow) });
+  const cases = (data ?? []) as Record<string, unknown>[];
+  const caseIds = cases.map((c) => c.id as string).filter(Boolean);
+  const today = new Date().toISOString().slice(0, 10);
+  let nextDateByCaseId: Record<string, string> = {};
+  if (caseIds.length > 0) {
+    const { data: dlRows } = await db
+      .from("deadlines")
+      .select("case_id, deadline_date")
+      .in("case_id", caseIds)
+      .gte("deadline_date", today)
+      .order("deadline_date", { ascending: true });
+    const byCase = new Map<string, string>();
+    for (const r of dlRows ?? []) {
+      const cid = r.case_id as string;
+      if (!byCase.has(cid)) byCase.set(cid, r.deadline_date as string);
+    }
+    nextDateByCaseId = Object.fromEntries(byCase);
+  }
+  const out = cases.map((r) => {
+    const row = fromRow(r);
+    return { ...row, nextDate: nextDateByCaseId[row.id as string] ?? null };
+  });
+  return NextResponse.json({ data: out });
 }
 
 export async function POST(request: NextRequest) {

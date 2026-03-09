@@ -99,5 +99,6 @@ CREATE POLICY "Allow delete for authenticated" ON public.cases FOR DELETE TO aut
 
 - `staff` / `clients` 테이블이 이미 있으면 `CREATE TABLE IF NOT EXISTS` 때문에 건너뜁니다.
 - `public.cases`만 없을 때는 위 스크립트에서 `cases` 관련 부분만 실행해도 됩니다(단, `public.staff`, `public.clients`, `set_updated_at` 함수는 있어야 함).
+- **관리자 > 사건관리**의 목록 조회·대량 엑셀 등록·일괄 종결/삭제는 모두 이 `public.cases` 테이블을 사용합니다. 테이블이 없으면 "DB 연동 오류 - public.cases 테이블 없음"이 나오므로, 반드시 위 SQL을 한 번 실행하세요.
 
 원본 마이그레이션 파일: `supabase/migrations/20260306000001_cases_standalone.sql`

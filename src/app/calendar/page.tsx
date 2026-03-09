@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
+import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft, ChevronRight, CalendarDays, Scale } from "lucide-react";
 import Link from "next/link";
 import { mockCases, mockConsultations } from "@/lib/mockData";
@@ -12,21 +11,42 @@ import { getDeadlinesForDate } from "@/lib/deadlineStorage";
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
 
+/** API 기일 항목 (달력 셀 표시용) */
+type ApiDeadlineItem = { id: string; date: string; caseNumber: string; type?: string };
+
 export default function CalendarPage() {
   const today = new Date();
   const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1));
-  const [, setRefreshKey] = useState(0);
-  useEffect(() => {
-    const onFocus = () => setRefreshKey((k) => k + 1);
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, []);
+  const [apiDeadlines, setApiDeadlines] = useState<ApiDeadlineItem[]>([]);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth();
+  const dateFrom = `${year}-${String(month + 1).padStart(2, "0")}-01`;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  const dateTo = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+
+  const fetchDeadlines = useCallback(() => {
+    fetch(`/api/deadlines?dateFrom=${dateFrom}&dateTo=${dateTo}`)
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((json) => setApiDeadlines((json.data ?? []).map((d: { id: string; date: string; caseNumber?: string; type?: string }) => ({
+        id: d.id,
+        date: d.date,
+        caseNumber: d.caseNumber ?? "",
+        type: d.type,
+      }))))
+      .catch(() => setApiDeadlines([]));
+  }, [dateFrom, dateTo]);
+  useEffect(() => {
+    fetchDeadlines();
+  }, [fetchDeadlines]);
+  useEffect(() => {
+    const onFocus = () => fetchDeadlines();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [fetchDeadlines]);
 
   const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const daysInMonth = lastDay;
   const daysInPrevMonth = new Date(year, month, 0).getDate();
 
   const cells: (number | null)[] = [];
@@ -44,7 +64,21 @@ export default function CalendarPage() {
     const dateStr = getDateStr(day);
     return mockConsultations.filter((c) => c.consultationDate === dateStr && c.status !== "cancelled");
   };
-  const getDeadlinesForDay = (day: number) => getDeadlinesForDate(getDateStr(day));
+
+  const getDeadlinesForDay = (day: number) => {
+    const dateStr = getDateStr(day);
+    const local = getDeadlinesForDate(dateStr);
+    const fromApi = apiDeadlines.filter((d) => d.date === dateStr).map((d) => ({
+      id: d.id,
+      date: d.date,
+      caseNumber: d.caseNumber || d.type || "기일",
+      type: d.type,
+      status: "active" as const,
+      createdAt: "",
+      updatedAt: "",
+    }));
+    return [...fromApi, ...local];
+  };
 
   const openManagePopup = (date: string) => {
     const url = `/calendar/manage?date=${date}`;

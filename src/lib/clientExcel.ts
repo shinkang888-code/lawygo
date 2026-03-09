@@ -82,21 +82,35 @@ export function parseClientExcel(file: File): Promise<ClientExcelParseResult> {
         const errors: ClientExcelValidationError[] = [];
         const clients: Array<Omit<ClientItem, "id" | "createdAt" | "updatedAt" | "deletedAt" | "callMemoIds">> = [];
 
+        const headers = Object.keys(rows[0] ?? {});
+        const isGuestlistFormat = headers.includes("의뢰인명");
+
         for (let i = 0; i < rows.length; i++) {
           const rowIndex = i + 1;
           const row = rows[i];
-          if (isEmptyRow(row)) continue;
+          if (isGuestlistFormat) {
+            if (!getCell(row, "의뢰인명")) continue;
+          } else if (isEmptyRow(row)) {
+            continue;
+          }
 
-          const name = getCell(row, "의뢰인");
-          const phone = getCell(row, "연락처") || undefined;
-          const mobile = getCell(row, "휴대폰") || undefined;
+          const name = isGuestlistFormat ? getCell(row, "의뢰인명") : getCell(row, "의뢰인");
+          const phone = getCell(row, "연락처") || (isGuestlistFormat ? getCell(row, "전화") : undefined);
+          const mobile = isGuestlistFormat ? getCell(row, "이동전화") : getCell(row, "휴대폰");
           const email = getCell(row, "이메일") || undefined;
           const address = getCell(row, "주소") || undefined;
           const idNumber = getCell(row, "주민번호") || undefined;
           const bizNumber = getCell(row, "사업자번호") || undefined;
-          const memo = getCell(row, "메모") || undefined;
+          let memo = getCell(row, "메모") || undefined;
+          if (isGuestlistFormat) {
+            const guestCode = getCell(row, "고유번호");
+            const 비고 = getCell(row, "비고");
+            const parts = [비고, guestCode ? `고유번호: ${guestCode}` : ""].filter(Boolean);
+            if (parts.length) memo = [memo, ...parts].filter(Boolean).join(" / ") || undefined;
+          }
 
           if (!name) {
+            if (isGuestlistFormat) continue;
             errors.push({ row: rowIndex, field: "의뢰인", message: "의뢰인(이름)이 비어 있습니다." });
             continue;
           }

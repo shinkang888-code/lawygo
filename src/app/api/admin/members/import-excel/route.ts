@@ -15,8 +15,22 @@ import { checkRateLimit, getClientIdentifier, LIMIT_IMPORT_PER_MIN } from "@/lib
 
 const ALLOWED_ROLES = ["관리자", "임원", "변호사", "사무장", "국장", "직원", "사무원", "인턴"] as const;
 const REQUIRED_HEADERS = ["로그인ID", "이름", "역할"] as const;
+/** user_lawygo.xls 형식: 성명, ID, 사용자유형 */
+const USER_LAWYGO_HEADERS = ["성명", "ID"] as const;
 const DEFAULT_PASSWORD = "changeMe1!";
 const DEFAULT_MANAGEMENT_NUMBER = "00000";
+
+function mapUserTypeToRole(사용자유형: string): string {
+  const s = String(사용자유형 ?? "").trim();
+  if (s.includes("변호사")) return "변호사";
+  if (s.includes("관리자")) return "관리자";
+  if (s.includes("국장")) return "국장";
+  if (s.includes("사무장")) return "사무장";
+  if (s.includes("임원")) return "임원";
+  if (s.includes("인턴")) return "인턴";
+  if (s.includes("사무원")) return "사무원";
+  return "직원";
+}
 
 /** 파일 업로드 보안: 최대 5MB */
 const MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024;
@@ -112,24 +126,36 @@ export async function POST(request: NextRequest) {
   }
 
   const headers = Object.keys(rows[0] ?? {});
-  const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
-  if (missingHeaders.length > 0) {
+  const hasStandard = REQUIRED_HEADERS.every((h) => headers.includes(h));
+  const hasUserLawygo = USER_LAWYGO_HEADERS.every((h) => headers.includes(h));
+
+  if (!hasStandard && !hasUserLawygo) {
     return NextResponse.json(
       {
-        error: "엑셀 형식이 맞지 않습니다. 필수 컬럼이 없습니다.",
-        errors: [{ row: 0, field: "헤더", message: `필수 컬럼: ${REQUIRED_HEADERS.join(", ")}. 없음: ${missingHeaders.join(", ")}` }],
+        error: "엑셀 형식이 맞지 않습니다. 표준(로그인ID, 이름, 역할) 또는 user_lawygo(성명, ID, 사용자유형) 형식이어야 합니다.",
+        errors: [{ row: 0, field: "헤더", message: `필수: ${REQUIRED_HEADERS.join(", ")} 또는 성명, ID, 사용자유형` }],
       },
       { status: 400 }
     );
   }
 
+  const normalizedRows: Record<string, unknown>[] = hasUserLawygo
+    ? rows.map((row) => ({
+        로그인ID: getCell(row, "ID"),
+        이름: getCell(row, "성명"),
+        역할: mapUserTypeToRole(getCell(row, "사용자유형")),
+        비밀번호: DEFAULT_PASSWORD,
+        관리번호: getCell(row, "ID") || DEFAULT_MANAGEMENT_NUMBER,
+      }))
+    : rows;
+
   const errors: ExcelRowError[] = [];
   const loginIdsInFile = new Set<string>();
   const parsed: { loginId: string; name: string; role: string; password: string; managementNumber: string }[] = [];
 
-  for (let i = 0; i < rows.length; i++) {
+  for (let i = 0; i < normalizedRows.length; i++) {
     const rowIndex = i + 1;
-    const row = rows[i];
+    const row = normalizedRows[i];
     const loginId = getCell(row, "로그인ID").toLowerCase();
     const name = getCell(row, "이름");
     const role = getCell(row, "역할");

@@ -14,11 +14,13 @@ import {
   Plus,
   Loader2,
   SlidersHorizontal,
+  FileDown,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
+import { downloadCaseExcelTemplate } from "@/lib/caseExcel";
 
 const STATUS_OPTIONS = [
   { value: "", label: "전체" },
@@ -62,16 +64,19 @@ const EXCEL_COLUMN_MAP: Record<string, string> = {
   case_number: "caseNumber",
   사건종류: "caseType",
   종류: "caseType",
+  소분류: "caseType",
   case_type: "caseType",
   사건명: "caseName",
   "사건 명": "caseName",
   case_name: "caseName",
   법원: "court",
   court: "court",
+  계속기관: "court",
   의뢰인: "clientName",
   당사자: "clientName",
   client_name: "clientName",
   지위: "clientPosition",
+  "의)지위": "clientPosition",
   client_position: "clientPosition",
   상대방: "opponentName",
   opponent_name: "opponentName",
@@ -79,6 +84,7 @@ const EXCEL_COLUMN_MAP: Record<string, string> = {
   status: "status",
   담당자: "assignedStaff",
   수행변호사: "assignedStaff",
+  수행: "assignedStaff",
   assigned_staff_name: "assignedStaff",
   보조: "assistants",
   assistants: "assistants",
@@ -90,11 +96,25 @@ const EXCEL_COLUMN_MAP: Record<string, string> = {
   received_amount: "receivedAmount",
   미수금: "pendingAmount",
   pending_amount: "pendingAmount",
+  전자소송: "isElectronic",
+  전자: "isElectronic",
+  긴급: "isUrgent",
+  기일고정: "isImmutable",
+  is_electronic: "isElectronic",
+  is_urgent: "isUrgent",
+  is_immutable_deadline: "isImmutable",
   비고: "notes",
   notes: "notes",
 };
 
 type CaseRow = Record<string, string | number>;
+
+function toBool(v: string | number | boolean): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v !== 0;
+  const s = String(v).trim().toUpperCase();
+  return s === "Y" || s === "YES" || s === "O" || s === "1" || s === "TRUE" || s === "예";
+}
 
 function parseExcelToCases(file: File): Promise<CaseRow[]> {
   return new Promise((resolve, reject) => {
@@ -131,6 +151,9 @@ function parseExcelToCases(file: File): Promise<CaseRow[]> {
             });
             if (!normalized.status) normalized.status = "진행중";
             if (!normalized.caseType) normalized.caseType = "민사";
+            if (normalized.isElectronic !== undefined) normalized.isElectronic = toBool(normalized.isElectronic);
+            if (normalized.isUrgent !== undefined) normalized.isUrgent = toBool(normalized.isUrgent);
+            if (normalized.isImmutable !== undefined) normalized.isImmutable = toBool(normalized.isImmutable);
             out.push(normalized);
           }
         }
@@ -321,6 +344,15 @@ export default function AdminCasesPage() {
             사건 1건 등록
           </Button>
         </Link>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          leftIcon={<FileDown size={14} />}
+          onClick={downloadCaseExcelTemplate}
+        >
+          양식 다운로드
+        </Button>
       </div>
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
