@@ -26,12 +26,7 @@ export interface CaseItem {
   updatedAt: string;
 }
 
-export type CaseStatus =
-  | "진행중"
-  | "완료"
-  | "보류"
-  | "취하"
-  | "종결";
+export type CaseStatus = "진행중" | "종결" | "사임";
 
 /** 직원 역할 (폼 선택용) */
 export type StaffRoleOption = "관리자" | "임원" | "변호사" | "사무장" | "국장" | "직원";

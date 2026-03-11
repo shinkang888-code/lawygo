@@ -40,17 +40,18 @@ export async function POST(request: NextRequest) {
   if (!db) {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const hint = !url && !key
-      ? " .env.local에 NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY를 넣은 뒤 개발 서버를 재시작하세요."
-      : !url
-        ? " NEXT_PUBLIC_SUPABASE_URL을 확인하고 서버를 재시작하세요."
-        : !key
-          ? " SUPABASE_SERVICE_ROLE_KEY를 확인하고 서버를 재시작하세요."
-          : " 서버를 재시작한 뒤 다시 시도하세요.";
+    const missing: string[] = [];
+    if (!url?.trim()) missing.push("NEXT_PUBLIC_SUPABASE_URL");
+    if (!key) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+    const hint = missing.length
+      ? `.env.local(로컬) 또는 Vercel 환경 변수(배포)에 ${missing.join(", ")}를 설정한 뒤 서버를 재시작/재배포하세요.`
+      : "서버를 재시작한 뒤 다시 시도하세요.";
     return NextResponse.json(
       {
-        error: "DB가 연결되지 않았습니다." + hint,
+        error: "DB가 연결되지 않았습니다.",
         code: "DB_NOT_CONFIGURED",
+        missing,
+        hint,
       },
       { status: 503 }
     );

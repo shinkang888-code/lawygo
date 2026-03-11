@@ -16,7 +16,7 @@ const filterOptions = [
   {
     field: "status" as const,
     label: "진행상태",
-    options: ["진행중", "완료", "보류", "취하", "종결"],
+    options: ["진행중", "종결", "사임"],
   },
   {
     field: "caseType" as const,

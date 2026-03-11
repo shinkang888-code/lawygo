@@ -104,6 +104,20 @@ export default function DashboardPage() {
     [upcomingCases, upcomingPage]
   );
 
+  const openDeadlineManage = (nextDate?: string | null) => {
+    if (!nextDate || typeof window === "undefined") return;
+    const url = `/calendar/manage?date=${encodeURIComponent(nextDate)}`;
+    const w = 520;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(
+      url,
+      "calendar-manage",
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+  };
+
   return (
     <div className="p-4 sm:p-6 max-w-screen-2xl mx-auto">
       <motion.div variants={containerVariants} initial="hidden" animate="visible" className="space-y-5">
@@ -399,8 +413,11 @@ export default function DashboardPage() {
                 {upcomingToShow.map((c) => {
                   const dday = getDDay(c.nextDate!);
                   return (
-                    <Link key={c.id} href={`/cases/${c.id}`}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors"
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => openDeadlineManage(c.nextDate)}
+                      className="flex w-full items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer transition-colors text-left"
                     >
                       <div className={cn(
                         "text-center w-10 shrink-0 rounded-lg py-1",
@@ -421,7 +438,7 @@ export default function DashboardPage() {
                         <div className="text-xs text-text-muted">{c.caseNumber} · {c.nextDateType}</div>
                       </div>
                       <DDayBadge dday={dday} />
-                    </Link>
+                    </button>
                   );
                 })}
               </div>

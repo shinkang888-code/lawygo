@@ -54,9 +54,25 @@ function useCurrentUser(): { role: string; isAdmin: boolean } {
   return user;
 }
 
+function mapApiToClientItem(r: Record<string, unknown>): ClientItem {
+  return {
+    id: String(r.id ?? ""),
+    name: String(r.name ?? ""),
+    phone: (r.phone as string) ?? undefined,
+    mobile: (r.mobile as string) ?? undefined,
+    email: (r.email as string) ?? undefined,
+    address: (r.address as string) ?? undefined,
+    memo: (r.memo as string) ?? undefined,
+    createdAt: String(r.createdAt ?? new Date().toISOString()),
+    updatedAt: String(r.updatedAt ?? new Date().toISOString()),
+  };
+}
+
 export default function ClientsPage() {
   const { isAdmin } = useCurrentUser();
   const [list, setList] = useState<ClientItem[]>([]);
+  const [useApi, setUseApi] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredList, setFilteredList] = useState<ClientItem[]>([]);
   const [page, setPage] = useState(1);
@@ -64,7 +80,10 @@ export default function ClientsPage() {
   const [modalOpen, setModalOpen] = useState<"add" | "edit" | null>(null);
   const [excelErrors, setExcelErrors] = useState<ClientExcelValidationError[]>([]);
   const [excelErrorModalOpen, setExcelErrorModalOpen] = useState(false);
+  const [excelReplaceMode, setExcelReplaceMode] = useState(false);
+  const [excelUploading, setExcelUploading] = useState(false);
   const excelInputRef = useRef<HTMLInputElement>(null);
+   const [sortKey, setSortKey] = useState<"name" | "address" | null>(null);
   const [form, setForm] = useState({
     name: "",
     phone: "",
@@ -76,8 +95,25 @@ export default function ClientsPage() {
     memo: "",
   });
 
-  const refresh = useCallback(() => {
-    setList(loadClientsRaw());
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/clients", { credentials: "include" });
+      if (res.ok) {
+        const json = await res.json();
+        const data = (json.data ?? []).map(mapApiToClientItem);
+        setList(data);
+        setUseApi(true);
+      } else {
+        setList(loadClientsRaw());
+        setUseApi(false);
+      }
+    } catch {
+      setList(loadClientsRaw());
+      setUseApi(false);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -85,12 +121,32 @@ export default function ClientsPage() {
   }, [refresh]);
 
   useEffect(() => {
-    const data = searchQuery.trim()
-      ? searchClientsIncludingDeleted(searchQuery)
-      : loadClientsRaw();
+    const base = list;
+    let data = searchQuery.trim()
+      ? base.filter((c) => {
+          const q = searchQuery.trim().toLowerCase();
+          const name = (c.name ?? "").toLowerCase();
+          const phone = (c.phone ?? "").toLowerCase();
+          const mobile = (c.mobile ?? "").toLowerCase();
+          const email = (c.email ?? "").toLowerCase();
+          const address = (c.address ?? "").toLowerCase();
+          const memo = (c.memo ?? "").toLowerCase();
+          return name.includes(q) || phone.includes(q) || mobile.includes(q) || email.includes(q) || address.includes(q) || memo.includes(q);
+        })
+      : base;
+
+    if (sortKey) {
+      const collator = new Intl.Collator("ko-KR");
+      data = [...data].sort((a, b) => {
+        const aVal = (sortKey === "name" ? a.name : a.address) ?? "";
+        const bVal = (sortKey === "name" ? b.name : b.address) ?? "";
+        return collator.compare(aVal, bVal);
+      });
+    }
+
     setFilteredList(data);
     setPage(1);
-  }, [list, searchQuery]);
+  }, [list, searchQuery, sortKey]);
 
   const totalPages = Math.max(1, Math.ceil(filteredList.length / PAGE_SIZE));
   const paginated = filteredList.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -210,6 +266,33 @@ export default function ClientsPage() {
       toast.error("엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.");
       return;
     }
+    if (excelReplaceMode && !confirm("기존 고객을 모두 삭제한 뒤 엑셀 내용으로 전량 반영합니다. 계속하시겠습니까?")) {
+      return;
+    }
+    setExcelUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("replace", excelReplaceMode ? "true" : "false");
+      const res = await fetch("/api/admin/clients/import-excel", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        toast.success(data.replaced ? `기존 데이터 삭제 후 ${data.count ?? 0}건 반영되었습니다.` : `${data.count ?? 0}건이 고객 목록에 추가되었습니다.`);
+        refresh();
+        return;
+      }
+      if (res.status === 503) {
+        toast.error("DB가 연결되지 않았습니다. 엑셀은 로컬에만 추가됩니다.");
+      }
+    } catch {
+      toast.error("엑셀 반영 요청에 실패했습니다.");
+    } finally {
+      setExcelUploading(false);
+    }
     const result = await parseClientExcel(file);
     if (!result.valid) {
       setExcelErrors(result.errors);
@@ -220,13 +303,11 @@ export default function ClientsPage() {
       toast.error("추가할 고객 행이 없습니다. 의뢰인(이름)이 있는 행만 추가됩니다.");
       return;
     }
-    let added = 0;
     for (const row of result.clients) {
       saveClient(row);
-      added += 1;
     }
     refresh();
-    toast.success(`${added}명이 고객 목록에 추가되었습니다.`);
+    toast.success(`${result.clients.length}명이 고객 목록에 추가되었습니다. (로컬)`);
   };
 
   return (
@@ -289,11 +370,20 @@ export default function ClientsPage() {
             >
               삭제
             </Button>
+            <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={excelReplaceMode}
+                onChange={(e) => setExcelReplaceMode(e.target.checked)}
+                className="rounded border-slate-300 text-primary-600"
+              />
+              기존 고객 삭제 후 엑셀 전량 반영
+            </label>
             <Button type="button" variant="outline" size="sm" leftIcon={<FileDown size={14} />} onClick={handleExcelDownload}>
               엑셀다운
             </Button>
-            <Button type="button" variant="outline" size="sm" leftIcon={<FileUp size={14} />} onClick={handleExcelAddClick}>
-              엑셀추가
+            <Button type="button" variant="outline" size="sm" leftIcon={<FileUp size={14} />} onClick={handleExcelAddClick} disabled={excelUploading}>
+              {excelUploading ? "반영 중…" : "엑셀추가"}
             </Button>
             <input
               ref={excelInputRef}
@@ -302,6 +392,9 @@ export default function ClientsPage() {
               className="hidden"
               onChange={handleExcelFileChange}
             />
+            <span className="text-xs text-slate-500 hidden sm:inline">
+              guestlist: 의뢰인명·이동전화·이메일·주소·고유번호 등
+            </span>
             {isAdmin && (
               <Button
                 type="button"
@@ -392,10 +485,16 @@ export default function ClientsPage() {
                 </tr>
               </thead>
               <tbody>
-                {paginated.length === 0 ? (
+                {loading ? (
                   <tr>
                     <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                      {searchQuery.trim() ? "검색 결과가 없습니다." : "등록된 고객이 없습니다. 등록 버튼으로 추가하세요."}
+                      로딩 중…
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
+                      {searchQuery.trim() ? "검색 결과가 없습니다." : "등록된 고객이 없습니다. 엑셀 전량 반영 또는 등록 버튼으로 추가하세요."}
                     </td>
                   </tr>
                 ) : (
@@ -484,11 +583,30 @@ export default function ClientsPage() {
 
           {/* 하단 페이지네이션 */}
           {totalPages > 1 && (
-            <div className="flex items-center justify-between gap-4 px-4 py-3 bg-slate-50 border-t border-slate-200">
+            <div className="flex items-center justify-between gap-4 px-4 py-3 bg-slate-50 border-t border-slate-200 flex-wrap">
               <div className="text-xs text-slate-500">
                 {(page - 1) * PAGE_SIZE + 1}-{Math.min(page * PAGE_SIZE, filteredList.length)} / {filteredList.length}건
               </div>
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-3 text-xs text-slate-600">
+                <span>정렬:</span>
+                <Button
+                  type="button"
+                  variant={sortKey === "name" ? "primary" : "outline"}
+                  size="xs"
+                  onClick={() => setSortKey((prev) => (prev === "name" ? null : "name"))}
+                >
+                  의뢰인
+                </Button>
+                <Button
+                  type="button"
+                  variant={sortKey === "address" ? "primary" : "outline"}
+                  size="xs"
+                  onClick={() => setSortKey((prev) => (prev === "address" ? null : "address"))}
+                >
+                  주소
+                </Button>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap justify-end">
                 <Button
                   variant="outline"
                   size="xs"
@@ -498,19 +616,32 @@ export default function ClientsPage() {
                 >
                   이전
                 </Button>
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-                  <button
-                    key={p}
-                    type="button"
-                    onClick={() => setPage(p)}
-                    className={cn(
-                      "min-w-[28px] h-7 px-1.5 rounded text-xs font-medium transition-colors",
-                      page === p ? "bg-primary-600 text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
-                    )}
-                  >
-                    {p}
-                  </button>
-                ))}
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter((n) => {
+                    if (totalPages <= 7) return true;
+                    if (n === 1 || n === totalPages) return true;
+                    if (Math.abs(n - page) <= 1) return true;
+                    return false;
+                  })
+                  .map((p, idx, arr) => (
+                    <span key={p}>
+                      {idx > 0 && arr[idx - 1] !== p - 1 && (
+                        <span className="px-1 text-slate-400">…</span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setPage(p)}
+                        className={cn(
+                          "min-w-[28px] h-7 px-1.5 rounded text-xs font-medium transition-colors",
+                          page === p
+                            ? "bg-primary-600 text-white"
+                            : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-100"
+                        )}
+                      >
+                        {p}
+                      </button>
+                    </span>
+                  ))}
                 <Button
                   variant="outline"
                   size="xs"

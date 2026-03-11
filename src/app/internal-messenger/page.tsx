@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { motion } from "framer-motion";
 import {
   MessageCircle,
@@ -73,6 +73,8 @@ export default function InternalMessengerPage() {
   const [files, setFiles] = useState<{ file: File; data: string }[]>([]);
   const [expandedReceivedId, setExpandedReceivedId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const myId = currentUser.id;
+  const myLoginId = currentUser.loginId;
 
   useEffect(() => {
     fetch("/api/staff", { credentials: "include", cache: "no-store" })
@@ -92,6 +94,36 @@ export default function InternalMessengerPage() {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  const allMessages = useMemo(() => {
+    const map = new Map<string, InternalMessage>();
+    [...sentList, ...receivedList].forEach((m) => {
+      if (m.id) map.set(m.id, m);
+    });
+    return Array.from(map.values()).sort(
+      (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+  }, [sentList, receivedList]);
+
+  const isRecipient = useCallback(
+    (m: InternalMessage) => {
+      const rid = String(m.recipientId ?? "").trim();
+      const rLogin = String(
+        (m as InternalMessage & { recipientLoginId?: string }).recipientLoginId ?? ""
+      ).trim().toLowerCase();
+      const meId = String(myId ?? "").trim();
+      const meLogin = String(myLoginId ?? "").trim().toLowerCase();
+      if (meId && rid && meId === rid) return true;
+      if (meLogin && rLogin && meLogin === rLogin) return true;
+      return false;
+    },
+    [myId, myLoginId]
+  );
+
+  const unreadCount = useMemo(
+    () => allMessages.filter((m) => isRecipient(m) && !m.readAt).length,
+    [allMessages, isRecipient]
+  );
 
   const isCurrentUser = useCallback(
     (s: StaffMember) =>
@@ -174,7 +206,7 @@ export default function InternalMessengerPage() {
 
   const handleExpandReceived = (msg: InternalMessage) => {
     setExpandedReceivedId((id) => (id === msg.id ? null : msg.id));
-    if (!msg.readAt) markAsRead(msg.id);
+    if (!msg.readAt && isRecipient(msg)) markAsRead(msg.id);
     refresh();
   };
 
@@ -366,30 +398,36 @@ export default function InternalMessengerPage() {
             </div>
           </div>
 
-          {/* 우측: 문서 수신 */}
+          {/* 우측: 문서 수발신 */}
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
             <div className="px-5 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center gap-2">
               <User size={18} className="text-primary-600" />
-              <h2 className="text-sm font-semibold text-slate-800">문서 수신</h2>
-              {receivedList.filter((m) => !m.readAt).length > 0 && (
+              <h2 className="text-sm font-semibold text-slate-800">문서 수발신</h2>
+              {unreadCount > 0 && (
                 <span className="ml-auto text-xs font-medium text-primary-600 bg-primary-100 rounded-full px-2 py-0.5">
-                  {receivedList.filter((m) => !m.readAt).length}건 읽지 않음
+                  {unreadCount}건 읽지 않음
                 </span>
               )}
             </div>
             <div className="p-5 flex-1 min-h-0 overflow-y-auto">
-              {receivedList.length === 0 ? (
-                <p className="text-xs text-text-muted py-8 text-center">수신한 메시지가 없습니다.</p>
+              {allMessages.length === 0 ? (
+                <p className="text-xs text-text-muted py-8 text-center">수신·발신한 메시지가 없습니다.</p>
               ) : (
                 <ul className="space-y-2">
-                  {receivedList.map((m) => {
+                  {allMessages.map((m) => {
                     const isExpanded = expandedReceivedId === m.id;
                     const fullMsg = isExpanded ? getMessageById(m.id) : m;
+                    const sentByMe = String(m.senderId ?? "") === String(myId ?? "");
+                    const counterpartName = sentByMe ? m.recipientName : m.senderName;
                     const openChat = () => {
-                      if (!m.senderId) return;
+                      const otherId = sentByMe ? m.recipientId : m.senderId;
+                      const otherName = counterpartName;
+                      if (!otherId) return;
                       markAsRead(m.id);
                       refresh();
-                      const url = `/internal-messenger/chat?with=${encodeURIComponent(m.senderId)}&name=${encodeURIComponent(m.senderName)}`;
+                      const url = `/internal-messenger/chat?with=${encodeURIComponent(
+                        String(otherId)
+                      )}&name=${encodeURIComponent(otherName)}`;
                       window.open(url, "_blank", "width=420,height=700,scrollbars=yes,resizable=yes");
                     };
                     return (
@@ -407,11 +445,23 @@ export default function InternalMessengerPage() {
                           onClick={() => handleExpandReceived(m)}
                           className="w-full flex items-center gap-3 p-3 text-left"
                         >
-                          <Avatar name={m.senderName} size="sm" />
+                          <Avatar name={counterpartName} size="sm" />
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium text-slate-800">{m.senderName}</span>
-                              {!m.readAt && (
+                              <span className="text-sm font-medium text-slate-800">
+                                {counterpartName}
+                              </span>
+                              <span
+                                className={cn(
+                                  "text-[11px] px-1.5 py-0.5 rounded-full border",
+                                  sentByMe
+                                    ? "border-sky-200 bg-sky-50 text-sky-700"
+                                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                )}
+                              >
+                                {sentByMe ? "발신" : "수신"}
+                              </span>
+                              {!m.readAt && isRecipient(m) && (
                                 <span className="w-2 h-2 rounded-full bg-primary-500 shrink-0" title="읽지 않음" />
                               )}
                             </div>

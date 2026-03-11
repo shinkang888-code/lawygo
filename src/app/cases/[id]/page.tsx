@@ -10,8 +10,9 @@ import {
   FileIcon, Download, Eye, AlertCircle, MoreVertical, Trash2, Edit, ExternalLink
 } from "lucide-react";
 import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
-import { mockCases, mockTimeline } from "@/lib/mockData";
+import { mockTimeline } from "@/lib/mockData";
 import { loadCourtOverrides } from "@/lib/caseCourtOverrides";
+import type { CaseItem } from "@/lib/types";
 import { cn, formatDate, getDDay, formatAmount, formatFileSize } from "@/lib/utils";
 import { StatusBadge, DDayBadge, ElectronicBadge, ImmutableBadge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -32,14 +33,35 @@ const tabs: { id: TabId; label: string; icon: React.ReactNode }[] = [
 
 export default function CaseDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const baseCase = mockCases.find((c) => c.id === id) ?? mockCases[0];
+  const [caseItem, setCaseItem] = useState<CaseItem | null>(null);
+  const [caseLoading, setCaseLoading] = useState(true);
   const [courtOverrides, setCourtOverrides] = useState<Record<string, string>>(() => loadCourtOverrides());
-  const caseItem = { ...baseCase, court: courtOverrides[baseCase.id] ?? baseCase.court };
-  const timeline = mockTimeline.filter((t) => t.caseId === caseItem.id);
 
   useEffect(() => {
     setCourtOverrides(loadCourtOverrides());
   }, [id]);
+
+  useEffect(() => {
+    if (!id) {
+      setCaseLoading(false);
+      return;
+    }
+    setCaseLoading(true);
+    fetch(`/api/admin/cases?id=${encodeURIComponent(id)}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((json: { data?: CaseItem[] }) => {
+        const list = Array.isArray(json.data) ? json.data : [];
+        const one = list.length > 0 ? list[0] : null;
+        setCaseItem(one);
+      })
+      .catch(() => setCaseItem(null))
+      .finally(() => setCaseLoading(false));
+  }, [id]);
+
+  const displayCase = caseItem
+    ? { ...caseItem, court: courtOverrides[caseItem.id] ?? caseItem.court }
+    : null;
+  const timeline = caseItem ? mockTimeline.filter((t) => t.caseId === caseItem.id) : [];
 
   const [activeTab, setActiveTab] = useState<TabId>("timeline");
   const [memoText, setMemoText] = useState("");
@@ -50,7 +72,7 @@ export default function CaseDetailPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const dday = caseItem.nextDate ? getDDay(caseItem.nextDate) : null;
+  const dday = displayCase?.nextDate ? getDDay(displayCase.nextDate) : null;
 
   const handleMemoSubmit = () => {
     if (!memoText.trim()) return;
@@ -66,6 +88,22 @@ export default function CaseDetailPage() {
     toast.success(`${files[0].name} 파일 업로드가 시작됩니다.`);
   };
 
+  if (caseLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[200px]">
+        <div className="text-sm text-text-muted">사건 정보를 불러오는 중...</div>
+      </div>
+    );
+  }
+  if (!displayCase) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[200px] gap-2">
+        <div className="text-sm text-slate-600">사건을 찾을 수 없습니다.</div>
+        <Link href="/cases" className="text-primary-600 hover:underline text-sm">사건 목록으로</Link>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full overflow-hidden">
       {/* ── Left: Case Context Pane ── */}
@@ -79,16 +117,16 @@ export default function CaseDetailPage() {
           {/* Title */}
           <div>
             <div className="flex flex-wrap items-center gap-1.5 mb-2">
-              {caseItem.isElectronic && <ElectronicBadge />}
-              {caseItem.isImmutable && <ImmutableBadge />}
-              <StatusBadge status={caseItem.status} />
+              {displayCase.isElectronic && <ElectronicBadge />}
+              {displayCase.isImmutable && <ImmutableBadge />}
+              <StatusBadge status={displayCase.status} />
             </div>
-            <h1 className="text-xl font-bold text-slate-900">{caseItem.caseNumber}</h1>
-            <p className="text-sm text-slate-600 mt-0.5 leading-snug">{caseItem.caseName}</p>
+            <h1 className="text-xl font-bold text-slate-900">{displayCase.caseNumber}</h1>
+            <p className="text-sm text-slate-600 mt-0.5 leading-snug">{displayCase.caseName}</p>
           </div>
 
           {/* Next Deadline */}
-          {caseItem.nextDate && (
+          {displayCase.nextDate && (
             <div className={cn(
               "rounded-xl p-3.5 border",
               dday !== null && dday <= 0 ? "bg-danger-50 border-danger-200 danger-pulse" :
@@ -99,20 +137,20 @@ export default function CaseDetailPage() {
                 <span className="text-xs font-medium text-text-muted">다음 기일</span>
                 {dday !== null && <DDayBadge dday={dday} />}
               </div>
-              <div className="text-base font-bold text-slate-900">{formatDate(caseItem.nextDate)}</div>
-              <div className="text-xs text-slate-600 mt-0.5">{caseItem.nextDateType}</div>
+              <div className="text-base font-bold text-slate-900">{formatDate(displayCase.nextDate)}</div>
+              <div className="text-xs text-slate-600 mt-0.5">{displayCase.nextDateType}</div>
             </div>
           )}
 
           {/* Info */}
           <div className="space-y-3">
             <SectionTitle>당사자 정보</SectionTitle>
-            <InfoItem icon="👤" label="의뢰인" value={`${caseItem.clientName} (${caseItem.clientPosition})`} />
-            <InfoItem icon="⚔️" label="상대방" value={caseItem.opponentName} />
-            <InfoItem icon="🏛️" label="기관" value={caseItem.court} />
+            <InfoItem icon="👤" label="의뢰인" value={`${displayCase.clientName} (${displayCase.clientPosition})`} />
+            <InfoItem icon="⚔️" label="상대방" value={displayCase.opponentName} />
+            <InfoItem icon="🏛️" label="기관" value={displayCase.court} />
             <button
               type="button"
-              onClick={() => copyAndOpenScourtSearch(caseItem.caseNumber, caseItem.clientName)}
+              onClick={() => copyAndOpenScourtSearch(displayCase.caseNumber, displayCase.clientName)}
               className="w-full mt-2 flex items-center justify-center gap-1.5 py-2 rounded-lg border border-slate-200 text-xs text-slate-600 hover:bg-slate-50 hover:border-primary-200 hover:text-primary-600 transition-colors"
               title="사건번호·당사자명 복사 후 대법원 나의 사건검색 열기"
             >
@@ -121,20 +159,20 @@ export default function CaseDetailPage() {
             </button>
 
             <SectionTitle>수임 정보</SectionTitle>
-            <InfoItem icon="📅" label="수임일" value={formatDate(caseItem.receivedDate)} />
+            <InfoItem icon="📅" label="수임일" value={formatDate(displayCase.receivedDate)} />
             {/* 담당: 클릭 시 이 사건 상세(타임라인) 새 창 */}
             <div className="flex gap-2">
               <span className="text-base flex-shrink-0 mt-0.5">⚖️</span>
               <div>
                 <div className="text-xs text-text-muted">담당</div>
-                {caseItem.assignedStaff ? (
+                {displayCase.assignedStaff ? (
                   <Link
                     href={`/cases/${id}`}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-sm font-medium text-primary-600 hover:underline"
                   >
-                    {caseItem.assignedStaff}
+                    {displayCase.assignedStaff}
                   </Link>
                 ) : (
                   <div className="text-sm font-medium text-slate-800">-</div>
@@ -143,14 +181,14 @@ export default function CaseDetailPage() {
             </div>
             <div>
               <div className="text-xs text-text-muted mb-1.5">담당 직원</div>
-              <StaffChips staffStr={caseItem.assistants} max={4} />
+              <StaffChips staffStr={displayCase.assistants} max={4} />
             </div>
 
             <SectionTitle>수임료 현황</SectionTitle>
-            <FinanceItem label="수임료" value={formatAmount(caseItem.amount)} />
-            <FinanceItem label="수납액" value={formatAmount(caseItem.receivedAmount)} positive />
-            {caseItem.pendingAmount > 0 && (
-              <FinanceItem label="미수금" value={formatAmount(caseItem.pendingAmount)} danger />
+            <FinanceItem label="수임료" value={formatAmount(displayCase.amount)} />
+            <FinanceItem label="수납액" value={formatAmount(displayCase.receivedAmount)} positive />
+            {displayCase.pendingAmount > 0 && (
+              <FinanceItem label="미수금" value={formatAmount(displayCase.pendingAmount)} danger />
             )}
           </div>
         </div>
@@ -167,7 +205,7 @@ export default function CaseDetailPage() {
               <ArrowLeft size={12} /> 목록
             </Link>
             <span className="text-slate-300 text-xs">/</span>
-            <span className="text-xs font-medium text-slate-700 truncate">{caseItem.caseNumber}</span>
+            <span className="text-xs font-medium text-slate-700 truncate">{displayCase.caseNumber}</span>
           </div>
 
           {/* Case title row */}
@@ -175,10 +213,10 @@ export default function CaseDetailPage() {
             <div className="flex items-center gap-3 min-w-0">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <span className="text-base font-bold text-slate-900">{caseItem.caseNumber}</span>
-                  {caseItem.isElectronic && <ElectronicBadge />}
+                  <span className="text-base font-bold text-slate-900">{displayCase.caseNumber}</span>
+                  {displayCase.isElectronic && <ElectronicBadge />}
                 </div>
-                <div className="text-xs text-text-muted truncate">{caseItem.caseName} · {caseItem.court}</div>
+                <div className="text-xs text-text-muted truncate">{displayCase.caseName} · {displayCase.court}</div>
               </div>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -216,7 +254,7 @@ export default function CaseDetailPage() {
                       exit={{ opacity: 0, scale: 0.95 }}
                       className="absolute right-0 top-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl z-30 w-44 overflow-hidden"
                     >
-                      <Link href={`/cases/${caseItem.id}/edit`} className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50" onClick={() => setMenuOpen(false)}>
+                      <Link href={`/cases/${displayCase.id}/edit`} className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-slate-700 hover:bg-slate-50" onClick={() => setMenuOpen(false)}>
                         <Edit size={14} /> 사건 수정
                       </Link>
                       <button
@@ -277,7 +315,7 @@ export default function CaseDetailPage() {
                   handleFileDrop={handleFileDrop}
                 />
               )}
-              {activeTab === "dates" && <DatesTab caseItem={caseItem} />}
+              {activeTab === "dates" && caseItem && <DatesTab caseItem={caseItem} />}
               {activeTab === "documents" && <DocumentsTab timeline={timeline} />}
               {activeTab === "finance" && <FinanceTab caseItem={caseItem} />}
             </motion.div>
@@ -305,7 +343,7 @@ export default function CaseDetailPage() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4">
-                {drawerOpen === "ai" ? <AIDrawer caseItem={caseItem} /> : <DocDrawer timeline={timeline} />}
+                {drawerOpen === "ai" && caseItem ? <AIDrawer caseItem={caseItem} /> : <DocDrawer timeline={timeline} />}
               </div>
             </div>
           </motion.aside>
@@ -316,9 +354,9 @@ export default function CaseDetailPage() {
       <ConfirmDeleteModal
         open={deleteModalOpen}
         onClose={() => setDeleteModalOpen(false)}
-        onConfirm={() => toast.error(`사건 ${caseItem.caseNumber}이 삭제되었습니다.`)}
-        caseNumber={caseItem.caseNumber}
-        title={`"${caseItem.caseName}" 사건을 삭제하시겠습니까?`}
+        onConfirm={() => toast.error(`사건 ${displayCase.caseNumber}이 삭제되었습니다.`)}
+        caseNumber={displayCase.caseNumber}
+        title={`"${displayCase.caseName}" 사건을 삭제하시겠습니까?`}
       />
     </div>
   );
@@ -404,12 +442,15 @@ function TimelineTab({
   );
 }
 
-function DatesTab({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
+function DatesTab({ caseItem }: { caseItem: CaseItem }) {
   const mockDates = [
-    { date: caseItem.nextDate ?? "2026-03-05", type: caseItem.nextDateType || "기일", court: caseItem.court, status: "예정" },
-    { date: "2026-01-20", type: "변론기일", court: caseItem.court, status: "완료" },
-    { date: "2025-12-05", type: "준비기일", court: caseItem.court, status: "완료" },
-  ];
+    {
+      date: caseItem.nextDate ?? caseItem.receivedDate,
+      type: (caseItem as any).nextDateType || "기일",
+      court: caseItem.court,
+      status: caseItem.nextDate ? "예정" : "완료",
+    },
+  ].filter((d) => !!d.date);
 
   return (
     <div className="max-w-2xl mx-auto px-5 py-5">
@@ -499,7 +540,9 @@ function DocumentsTab({ timeline }: { timeline: Timeline[] }) {
   );
 }
 
-function FinanceTab({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
+function FinanceTab({ caseItem }: { caseItem: CaseItem | null }) {
+  if (!caseItem) return null;
+  const progress = caseItem.amount > 0 ? Math.round((caseItem.receivedAmount / caseItem.amount) * 100) : 0;
   return (
     <div className="max-w-2xl mx-auto px-5 py-5 space-y-4">
       <h3 className="text-sm font-semibold text-slate-800">수임료 현황</h3>
@@ -509,13 +552,13 @@ function FinanceTab({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
           <div className="flex justify-between text-sm mb-2">
             <span className="font-medium text-slate-700">수납 진행률</span>
             <span className="font-bold text-slate-900">
-              {Math.round((caseItem.receivedAmount / caseItem.amount) * 100)}%
+              {progress}%
             </span>
           </div>
           <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: `${(caseItem.receivedAmount / caseItem.amount) * 100}%` }}
+              animate={{ width: `${progress}%` }}
               transition={{ duration: 0.8, delay: 0.1 }}
               className="h-full bg-success-500 rounded-full"
             />
@@ -626,7 +669,7 @@ function TimelineItem({ item }: { item: Timeline }) {
   );
 }
 
-function AIDrawer({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
+function AIDrawer({ caseItem }: { caseItem: CaseItem }) {
   return (
     <div className="space-y-4">
       <div className="bg-gradient-to-br from-primary-50 to-violet-50 rounded-xl p-4 border border-primary-100">
@@ -636,7 +679,7 @@ function AIDrawer({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
         </div>
         <p className="text-sm text-slate-700 leading-relaxed">
           {caseItem.caseName} 사건으로 현재 진행 중입니다.
-          {caseItem.nextDate && ` ${formatDate(caseItem.nextDate)} ${caseItem.nextDateType}이 예정되어 있습니다.`}
+          {caseItem.nextDate && ` ${formatDate(caseItem.nextDate)} ${(caseItem as any).nextDateType || "기일"}이 예정되어 있습니다.`}
           {caseItem.pendingAmount > 0 && ` 미수금 ${formatAmount(caseItem.pendingAmount)} 처리가 필요합니다.`}
         </p>
       </div>
@@ -644,7 +687,7 @@ function AIDrawer({ caseItem }: { caseItem: (typeof mockCases)[0] }) {
         <div className="text-xs font-semibold text-slate-600 uppercase tracking-wide">주요 이슈</div>
         {caseItem.nextDate && getDDay(caseItem.nextDate) <= 3 && (
           <div className="flex items-center gap-2 p-2.5 rounded-lg border text-sm font-medium text-danger-600 bg-danger-50 border-danger-200">
-            <AlertCircle size={13} /> 기일 임박 — {caseItem.nextDateType} D-{getDDay(caseItem.nextDate)}
+            <AlertCircle size={13} /> 기일 임박 — {(caseItem as any).nextDateType || "기일"} D-{getDDay(caseItem.nextDate)}
           </div>
         )}
         {caseItem.pendingAmount > 0 && (

@@ -1,19 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams } from "next/navigation";
-import Link from "next/link";
-import {
-  CalendarDays,
-  Plus,
-  Pencil,
-  Trash2,
-  Save,
-  X,
-  Settings2,
-  FileText,
-  ExternalLink,
-} from "lucide-react";
+import { CalendarDays, Plus, Pencil, Trash2, Save, X, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import type { DeadlineItem, DeadlineFormFieldConfig } from "@/lib/types";
@@ -25,7 +14,6 @@ import {
   saveFormSchema,
   DEFAULT_FORM_SCHEMA,
 } from "@/lib/deadlineStorage";
-import { mockCases } from "@/lib/mockData";
 import { cn } from "@/lib/utils";
 
 function toDateStr(d: Date): string {
@@ -45,19 +33,52 @@ function getDefaultValues(schema: DeadlineFormFieldConfig[]): Record<string, str
 export default function CalendarManagePage() {
   const searchParams = useSearchParams();
   const dateParam = searchParams.get("date") ?? toDateStr(new Date());
+  const editIdParam = searchParams.get("editId") ?? "";
 
-  const [deadlines, setDeadlines] = useState<DeadlineItem[]>([]);
+  const [apiDeadlines, setApiDeadlines] = useState<DeadlineItem[]>([]);
+  const [localDeadlines, setLocalDeadlines] = useState<DeadlineItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [schema, setSchema] = useState<DeadlineFormFieldConfig[]>(DEFAULT_FORM_SCHEMA);
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [schemaEditOpen, setSchemaEditOpen] = useState(false);
   const [schemaDraft, setSchemaDraft] = useState<DeadlineFormFieldConfig[]>([]);
+  const [editIdHandled, setEditIdHandled] = useState(false);
+
+  const deadlinesSource = [...apiDeadlines, ...localDeadlines];
+  const deadlines = [
+    ...apiDeadlines.filter((d) => !localDeadlines.some((l) => l.id === d.id)),
+    ...localDeadlines,
+  ];
+
+  const fetchDeadlines = useCallback(() => {
+    setLoading(true);
+    fetch(`/api/deadlines?dateFrom=${dateParam}&dateTo=${dateParam}`, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((json: { data?: Array<{ id: string; date: string; type?: string; caseNumber?: string; court?: string; memo?: string }> }) => {
+        const list = (json.data ?? []).map((d) => ({
+          id: d.id,
+          date: d.date,
+          caseNumber: d.caseNumber ?? "",
+          type: d.type ?? "기일",
+          court: d.court,
+          memo: d.memo,
+          status: "active" as const,
+          createdAt: "",
+          updatedAt: "",
+        }));
+        setApiDeadlines(list);
+      })
+      .catch(() => setApiDeadlines([]))
+      .finally(() => setLoading(false));
+  }, [dateParam]);
 
   const refresh = useCallback(() => {
     setSchema(loadFormSchema());
-    setDeadlines(getDeadlinesForDate(dateParam));
-  }, [dateParam]);
+    setLocalDeadlines(getDeadlinesForDate(dateParam));
+    fetchDeadlines();
+  }, [dateParam, fetchDeadlines]);
 
   useEffect(() => {
     refresh();
@@ -69,11 +90,7 @@ export default function CalendarManagePage() {
     }
   }, [dateParam]);
 
-  const casesForDay = useMemo(
-    () => mockCases.filter((c) => c.nextDate === dateParam),
-    [dateParam]
-  );
-  const totalCount = casesForDay.length + deadlines.length;
+  const totalCount = deadlines.length;
 
   const openNewForm = () => {
     const s = loadFormSchema();
@@ -104,6 +121,13 @@ export default function CalendarManagePage() {
     setFormOpen(false);
     setEditingId(null);
     refresh();
+    if (typeof window !== "undefined" && window.opener) {
+      try {
+        window.close();
+      } catch {
+        // ignore
+      }
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -137,6 +161,25 @@ export default function CalendarManagePage() {
     setSchemaDraft(JSON.parse(JSON.stringify(loadFormSchema())));
     setSchemaEditOpen(true);
   };
+  const openEditPopup = (item: DeadlineItem) => {
+    if (typeof window === "undefined") return;
+    const url = `/calendar/manage?date=${encodeURIComponent(dateParam)}&editId=${encodeURIComponent(item.id)}`;
+    const w = 520;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(url, "_blank", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
+  };
+
+  useEffect(() => {
+    if (!editIdParam || formOpen || editIdHandled) return;
+    const target = deadlinesSource.find((d) => d.id === editIdParam);
+    if (target) {
+      openEditForm(target);
+      setEditIdHandled(true);
+    }
+  }, [editIdParam, formOpen, deadlinesSource, editIdHandled]);
+
 
   const saveSchemaEdit = () => {
     saveFormSchema(schemaDraft);
@@ -154,10 +197,10 @@ export default function CalendarManagePage() {
             {dateParam} 기일
           </h1>
           <p className="text-sm text-text-muted mt-0.5">
-            사건 기일 {casesForDay.length}건 · 등록 기일 {deadlines.length}건 (총 {totalCount}건)
+            {loading ? "로딩 중…" : `기일 ${totalCount}건`}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button type="button" variant="outline" size="sm" onClick={openSchemaEdit} leftIcon={<Settings2 size={14} />}>
             폼 양식 수정
           </Button>
@@ -167,78 +210,57 @@ export default function CalendarManagePage() {
         </div>
       </div>
 
-      {/* 해당 날짜 사건 기일 (사건관리에서 온 목록) */}
-      {casesForDay.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
-            <FileText size={14} />
-            사건 기일 ({casesForDay.length}건)
-          </h2>
-          <div className="space-y-2">
-            {casesForDay.map((c) => (
-              <Link
-                key={c.id}
-                href={`/cases/${c.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-primary-50/40 p-3 shadow-sm hover:bg-primary-50/70 transition-colors group"
-              >
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium text-slate-800 truncate">
-                    {c.caseNumber} · {c.caseName}
-                  </p>
-                  <p className="text-xs text-text-muted mt-0.5">
-                    {c.nextDateType}
-                    {c.court && ` · ${c.court}`}
-                    {c.assignedStaff && ` · 담당: ${c.assignedStaff}`}
-                  </p>
-                </div>
-                <ExternalLink size={14} className="text-slate-400 group-hover:text-primary-600 shrink-0" />
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* 등록 기일 (등록·편집·소프트삭제) */}
+      {/* 기일 목록 (DB + 로컬) */}
       <div className="space-y-2 mb-6">
         <h2 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-1.5">
           <CalendarDays size={14} />
-          등록 기일 ({deadlines.length}건) · 등록/편집/삭제
+          기일 ({deadlines.length}건)
         </h2>
-        {deadlines.length === 0 ? (
+        {loading ? (
+          <div className="rounded-xl border border-slate-200 bg-slate-50/50 py-8 text-center text-sm text-text-muted">
+            기일 목록을 불러오는 중…
+          </div>
+        ) : deadlines.length === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 py-8 text-center text-sm text-text-muted">
-            이 날짜에 등록된 기일이 없습니다. &quot;기일 등록&quot;으로 추가하세요.
+            이 날짜에 등록된 기일이 없습니다. &quot;엑셀으로 기일 반영&quot;으로 datelist 엑셀을 올리거나 &quot;기일 등록&quot;으로 추가하세요.
           </div>
         ) : (
-          deadlines.map((d) => (
+          deadlines.map((d) => {
+            const isLocal = localDeadlines.some((l) => l.id === d.id);
+            return (
             <div
               key={d.id}
-              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm"
+              className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm cursor-pointer"
+              onDoubleClick={() => openEditPopup(d)}
             >
               <div className="min-w-0 flex-1">
-                <p className="font-medium text-slate-800 truncate">{d.caseNumber} · {d.type}</p>
+                <p className="font-medium text-slate-800 truncate">{d.caseNumber || "(사건번호 없음)"} · {d.type}</p>
                 <p className="text-xs text-text-muted mt-0.5">
                   {d.court && `${d.court} · `}{d.assignedStaff && `담당: ${d.assignedStaff}`}
                   {d.memo && ` · ${d.memo}`}
                 </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
-                <Button type="button" variant="ghost" size="sm" onClick={() => openEditForm(d)}>
-                  <Pencil size={14} />
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                  onClick={() => handleSoftDelete(d.id)}
-                >
-                  <Trash2 size={14} />
-                </Button>
+                {isLocal && (
+                  <>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => openEditForm(d)}>
+                      <Pencil size={14} />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      onClick={() => handleSoftDelete(d.id)}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
-          ))
+            );
+          })
         )}
       </div>
 

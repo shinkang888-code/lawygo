@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { LogIn, UserPlus, KeyRound, Settings2, Play } from "lucide-react";
+import { LogIn, UserPlus, KeyRound, Settings2, Play, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
+
+type DbStatus = { ok: boolean; connected?: boolean; missing?: string[]; hint?: string } | null;
 
 export default function LoginPage() {
   const router = useRouter();
@@ -15,6 +17,15 @@ export default function LoginPage() {
   const [managementNumber, setManagementNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [demoLoading, setDemoLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<DbStatus>(null);
+
+  useEffect(() => {
+    fetch("/api/auth/status", { credentials: "include" })
+      .then((r) => r.json().catch(() => ({ ok: false })))
+      .then((data: DbStatus) => setDbStatus(data));
+  }, []);
+
+  const dbNotConfigured = dbStatus && !dbStatus.ok;
 
   const handleDemoLogin = async () => {
     setDemoLoading(true);
@@ -25,7 +36,11 @@ export default function LoginPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "데모 로그인에 실패했습니다.");
+        const msg = res.status === 503 && data.hint
+          ? `${data.error} ${data.hint}`
+          : data.error ?? "데모 로그인에 실패했습니다.";
+        toast.error(msg);
+        if (data.missing?.length) setDbStatus((s) => (s ? { ...s, ok: false, missing: data.missing, hint: data.hint } : s));
         return;
       }
       toast.success("데모 계정으로 로그인되었습니다.");
@@ -58,7 +73,11 @@ export default function LoginPage() {
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        toast.error(data.error ?? "로그인에 실패했습니다.");
+        const msg = res.status === 503 && data.hint
+          ? `${data.error} ${data.hint}`
+          : data.error ?? "로그인에 실패했습니다.";
+        toast.error(msg);
+        if (data.missing?.length) setDbStatus((s) => (s ? { ...s, ok: false, missing: data.missing, hint: data.hint } : s));
         return;
       }
       toast.success("로그인되었습니다.");
@@ -73,6 +92,24 @@ export default function LoginPage() {
 
   return (
     <div className="w-full max-w-md">
+      {dbNotConfigured && (
+        <div className="mb-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+          <div className="flex gap-2">
+            <AlertCircle className="size-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="text-sm">
+              <p className="font-medium text-amber-800">DB가 연결되지 않았습니다</p>
+              <p className="text-amber-700 mt-1">{dbStatus?.hint ?? "환경 변수를 확인해 주세요."}</p>
+              {dbStatus?.missing?.length ? (
+                <p className="text-amber-600 mt-1">누락: {dbStatus.missing.join(", ")}</p>
+              ) : null}
+              <Link href="/login/setup-env" className="inline-block mt-2 text-primary-600 font-medium hover:underline">
+                Supabase 키 설정 →
+              </Link>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="text-center mb-8">
         <h1 className="text-2xl font-bold text-slate-900">LawyGo</h1>
         <p className="text-sm text-slate-600 mt-1">법무 관리 시스템 로그인</p>

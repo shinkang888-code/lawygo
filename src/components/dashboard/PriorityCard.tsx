@@ -57,6 +57,20 @@ export function PriorityCard({ cases, type }: PriorityCardProps) {
     return dday > 3 && dday <= 7;
   });
 
+  const openDeadlineManage = (c: CaseItem) => {
+    if (!c.nextDate || typeof window === "undefined") return;
+    const url = `/calendar/manage?date=${encodeURIComponent(c.nextDate)}`;
+    const w = 520;
+    const h = 720;
+    const left = Math.max(0, (window.screen.width - w) / 2);
+    const top = Math.max(0, (window.screen.height - h) / 2);
+    window.open(
+      url,
+      "calendar-manage",
+      `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`
+    );
+  };
+
   return (
     <div
       className={cn(
@@ -108,7 +122,9 @@ export function PriorityCard({ cases, type }: PriorityCardProps) {
                 <div className={cn(
                   "bg-white/15 backdrop-blur-sm rounded-lg px-3 py-2.5 cursor-pointer",
                   "transition-all duration-200 hover:bg-white/25"
-                )}>
+                )}
+                  onClick={() => openDeadlineManage(c)}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1.5 min-w-0">
                       {c.isElectronic && <Zap size={12} className="text-yellow-200 flex-shrink-0" />}
@@ -135,7 +151,10 @@ export function PriorityCard({ cases, type }: PriorityCardProps) {
                       transition={{ duration: 0.15 }}
                       className="absolute bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-sm rounded-b-lg px-2 py-1.5 flex items-center gap-1"
                     >
-                      <button className="flex-1 flex items-center justify-center gap-1 text-xs text-white/80 hover:text-white py-0.5 rounded hover:bg-white/10 transition-colors">
+                      <button
+                        className="flex-1 flex items-center justify-center gap-1 text-xs text-white/80 hover:text-white py-0.5 rounded hover:bg-white/10 transition-colors"
+                        onClick={() => openDeadlineManage(c)}
+                      >
                         <Eye size={11} /> 상세
                       </button>
                       <div className="w-px h-3 bg-white/20" />

@@ -35,26 +35,21 @@ export function Badge({ children, variant = "default", size = "sm", className }:
 
 const statusVariantMap: Record<CaseStatus, BadgeProps["variant"]> = {
   진행중: "primary",
-  완료: "success",
-  보류: "warning",
-  취하: "ghost",
   종결: "default",
+  사임: "ghost",
 };
 
 const statusLabelMap: Record<CaseStatus, string> = {
   진행중: "진행중",
-  완료: "완료",
-  보류: "보류",
-  취하: "취하",
   종결: "종결",
+  사임: "사임",
 };
 
-export function StatusBadge({ status }: { status: CaseStatus }) {
-  return (
-    <Badge variant={statusVariantMap[status]}>
-      {statusLabelMap[status]}
-    </Badge>
-  );
+export function StatusBadge({ status }: { status: CaseStatus | string }) {
+  const s = status as CaseStatus;
+  const variant = statusVariantMap[s] ?? "default";
+  const label = statusLabelMap[s] ?? status;
+  return <Badge variant={variant}>{label}</Badge>;
 }
 
 export function DDayBadge({ dday }: { dday: number }) {

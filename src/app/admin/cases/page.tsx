@@ -15,20 +15,22 @@ import {
   Loader2,
   SlidersHorizontal,
   FileDown,
+  ChevronLeft,
+  ChevronRight,
+  ToggleRight,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/components/ui/toast";
 import * as XLSX from "xlsx";
 import { cn } from "@/lib/utils";
-import { downloadCaseExcelTemplate } from "@/lib/caseExcel";
+import { downloadCaseExcelTemplate, parseExcelFileToCases } from "@/lib/caseExcel";
 
 const STATUS_OPTIONS = [
   { value: "", label: "전체" },
-  { value: "진행중", label: "현행사건(진행중)" },
-  { value: "종결", label: "종결사건" },
-  { value: "완료", label: "완료" },
-  { value: "보류", label: "보류" },
-  { value: "취하", label: "취하" },
+  { value: "진행중", label: "진행중" },
+  { value: "종결", label: "종결" },
+  { value: "사임", label: "사임" },
 ];
 
 const CASE_TYPE_OPTIONS = [
@@ -58,120 +60,15 @@ const STAFF_OPTIONS = [
   { value: "미배정", label: "미배정" },
 ];
 
-const EXCEL_COLUMN_MAP: Record<string, string> = {
-  사건번호: "caseNumber",
-  "사건 번호": "caseNumber",
-  case_number: "caseNumber",
-  사건종류: "caseType",
-  종류: "caseType",
-  소분류: "caseType",
-  case_type: "caseType",
-  사건명: "caseName",
-  "사건 명": "caseName",
-  case_name: "caseName",
-  법원: "court",
-  court: "court",
-  계속기관: "court",
-  의뢰인: "clientName",
-  당사자: "clientName",
-  client_name: "clientName",
-  지위: "clientPosition",
-  "의)지위": "clientPosition",
-  client_position: "clientPosition",
-  상대방: "opponentName",
-  opponent_name: "opponentName",
-  상태: "status",
-  status: "status",
-  담당자: "assignedStaff",
-  수행변호사: "assignedStaff",
-  수행: "assignedStaff",
-  assigned_staff_name: "assignedStaff",
-  보조: "assistants",
-  assistants: "assistants",
-  수임일: "receivedDate",
-  received_date: "receivedDate",
-  수임료: "amount",
-  amount: "amount",
-  수납액: "receivedAmount",
-  received_amount: "receivedAmount",
-  미수금: "pendingAmount",
-  pending_amount: "pendingAmount",
-  전자소송: "isElectronic",
-  전자: "isElectronic",
-  긴급: "isUrgent",
-  기일고정: "isImmutable",
-  is_electronic: "isElectronic",
-  is_urgent: "isUrgent",
-  is_immutable_deadline: "isImmutable",
-  비고: "notes",
-  notes: "notes",
-};
+const PAGE_SIZE = 15;
 
 type CaseRow = Record<string, string | number>;
-
-function toBool(v: string | number | boolean): boolean {
-  if (typeof v === "boolean") return v;
-  if (typeof v === "number") return v !== 0;
-  const s = String(v).trim().toUpperCase();
-  return s === "Y" || s === "YES" || s === "O" || s === "1" || s === "TRUE" || s === "예";
-}
-
-function parseExcelToCases(file: File): Promise<CaseRow[]> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const data = e.target?.result;
-        if (!data) return reject(new Error("파일을 읽을 수 없습니다."));
-        const wb = XLSX.read(data, { type: "binary" });
-        const firstSheet = wb.SheetNames[0];
-        const ws = wb.Sheets[firstSheet];
-        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[][];
-        if (rows.length < 2) {
-          resolve([]);
-          return;
-        }
-        const headers = (rows[0] as unknown[]).map((h) => String(h ?? "").trim());
-        const out: CaseRow[] = [];
-        for (let i = 1; i < rows.length; i++) {
-          const row = rows[i] as unknown[];
-          const obj: CaseRow = {};
-          headers.forEach((h, j) => {
-            const key = EXCEL_COLUMN_MAP[h] ?? h;
-            const val = row[j];
-            if (val !== undefined && val !== null && String(val).trim() !== "") {
-              obj[key] = typeof val === "number" ? val : String(val).trim();
-            }
-          });
-          if (Object.keys(obj).length > 0 && (obj.caseNumber || obj.case_number || obj["사건번호"])) {
-            const normalized: CaseRow = {};
-            Object.entries(obj).forEach(([k, v]) => {
-              const nk = EXCEL_COLUMN_MAP[k] ?? k;
-              normalized[nk] = v;
-            });
-            if (!normalized.status) normalized.status = "진행중";
-            if (!normalized.caseType) normalized.caseType = "민사";
-            if (normalized.isElectronic !== undefined) normalized.isElectronic = toBool(normalized.isElectronic);
-            if (normalized.isUrgent !== undefined) normalized.isUrgent = toBool(normalized.isUrgent);
-            if (normalized.isImmutable !== undefined) normalized.isImmutable = toBool(normalized.isImmutable);
-            out.push(normalized);
-          }
-        }
-        resolve(out);
-      } catch (err) {
-        reject(err);
-      }
-    };
-    reader.onerror = () => reject(new Error("파일 읽기 실패"));
-    reader.readAsBinaryString(file);
-  });
-}
 
 export default function AdminCasesPage() {
   const [list, setList] = useState<CaseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("진행중");
   const [caseTypeFilter, setCaseTypeFilter] = useState("");
   const [courtFilter, setCourtFilter] = useState("");
   const [assignedStaffFilter, setAssignedStaffFilter] = useState("");
@@ -179,6 +76,41 @@ export default function AdminCasesPage() {
   const [uploading, setUploading] = useState(false);
   const [actioning, setActioning] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [statusChangeOpen, setStatusChangeOpen] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [fullTotalCount, setFullTotalCount] = useState(0);
+  const [statusSummary, setStatusSummary] = useState<{ 진행중: number; 종결: number; 사임: number }>({
+    진행중: 0,
+    종결: 0,
+    사임: 0,
+  });
+  const [deleteAllStep, setDeleteAllStep] = useState<0 | 1>(0);
+
+  const fetchFullTotal = useCallback(async () => {
+    try {
+      const [allRes, inRes, closedRes, resignedRes] = await Promise.all([
+        fetch("/api/admin/cases?page=1&page_size=1"),
+        fetch("/api/admin/cases?status=진행중&page=1&page_size=1"),
+        fetch("/api/admin/cases?status=종결&page=1&page_size=1"),
+        fetch("/api/admin/cases?status=사임&page=1&page_size=1"),
+      ]);
+      const [all, inData, closedData, resignedData] = await Promise.all([
+        allRes.json(),
+        inRes.json(),
+        closedRes.json(),
+        resignedRes.json(),
+      ]);
+      if (allRes.ok && typeof all.total === "number") setFullTotalCount(all.total);
+      setStatusSummary({
+        진행중: inRes.ok && typeof inData.total === "number" ? inData.total : 0,
+        종결: closedRes.ok && typeof closedData.total === "number" ? closedData.total : 0,
+        사임: resignedRes.ok && typeof resignedData.total === "number" ? resignedData.total : 0,
+      });
+    } catch {
+      // 무시
+    }
+  }, []);
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -190,30 +122,54 @@ export default function AdminCasesPage() {
       if (caseTypeFilter) params.set("case_type", caseTypeFilter);
       if (courtFilter) params.set("court", courtFilter);
       if (assignedStaffFilter) params.set("assigned_staff", assignedStaffFilter);
-      const res = await fetch(`/api/admin/cases?${params}`);
+      params.set("page", String(page));
+      params.set("page_size", String(PAGE_SIZE));
+      const res = await fetch(`/api/admin/cases?${params.toString()}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "목록 조회 실패");
-      setList(Array.isArray(data.data) ? data.data : []);
+      const rows = Array.isArray(data.data) ? data.data : [];
+      setList(rows);
+      const total = typeof data.total === "number" ? data.total : rows.length;
+      setTotalCount(total);
     } catch (e) {
       const msg = e instanceof Error ? e.message : "목록을 불러올 수 없습니다.";
       setLastError(msg);
       toast.error(msg);
       setList([]);
+      setTotalCount(0);
     } finally {
       setLoading(false);
     }
-  }, [search, statusFilter, caseTypeFilter, courtFilter, assignedStaffFilter]);
+  }, [search, statusFilter, caseTypeFilter, courtFilter, assignedStaffFilter, page]);
 
   useEffect(() => {
     fetchList();
   }, [fetchList]);
+
+  useEffect(() => {
+    fetchFullTotal();
+  }, [fetchFullTotal]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, caseTypeFilter, courtFilter, assignedStaffFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const displayList = list;
+  const startItem = totalCount === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const endItem = Math.min(safePage * PAGE_SIZE, totalCount);
+
+  useEffect(() => {
+    if (totalPages >= 1 && page > totalPages) setPage(totalPages);
+  }, [totalPages, page]);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
     try {
-      const items = await parseExcelToCases(file);
+      const items = await parseExcelFileToCases(file);
       if (items.length === 0) {
         toast.error("엑셀에서 사건 데이터를 찾을 수 없습니다. 첫 행에 헤더(사건번호, 의뢰인 등)가 있어야 합니다.");
         return;
@@ -227,6 +183,7 @@ export default function AdminCasesPage() {
       if (!res.ok) throw new Error(data.error || "등록 실패");
       toast.success(data.message || `${items.length}건 등록되었습니다.`);
       fetchList();
+      fetchFullTotal();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "엑셀 등록 실패");
     } finally {
@@ -244,9 +201,22 @@ export default function AdminCasesPage() {
     });
   };
 
+  const displayIds = displayList.map((c) => String((c as { id?: string }).id ?? "")).filter(Boolean);
+  const allDisplaySelected = displayIds.length > 0 && displayIds.every((id) => selectedIds.has(id));
   const toggleSelectAll = () => {
-    if (selectedIds.size === list.length) setSelectedIds(new Set());
-    else setSelectedIds(new Set(list.map((c) => String((c as { id?: string }).id ?? "")).filter(Boolean)));
+    if (allDisplaySelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        displayIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        displayIds.forEach((id) => next.add(id));
+        return next;
+      });
+    }
   };
 
   const handleCloseCases = async () => {
@@ -268,6 +238,31 @@ export default function AdminCasesPage() {
       fetchList();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "종결 처리 실패");
+    } finally {
+      setActioning(false);
+    }
+  };
+
+  const handleStatusChange = async (newStatus: "진행중" | "종결" | "사임") => {
+    if (selectedIds.size === 0) {
+      toast.error("변경할 사건을 선택하세요.");
+      return;
+    }
+    setStatusChangeOpen(false);
+    setActioning(true);
+    try {
+      const res = await fetch("/api/admin/cases", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: Array.from(selectedIds), status: newStatus }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "상태 변경 실패");
+      toast.success(data.message);
+      setSelectedIds(new Set());
+      fetchList();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "상태 변경 실패");
     } finally {
       setActioning(false);
     }
@@ -314,7 +309,23 @@ export default function AdminCasesPage() {
             사건관리
           </h1>
           <p className="text-sm text-text-muted mt-0.5">
-            대량 엑셀 등록, 사건 목록 검색·필터, 종결·일괄 삭제
+            대량 엑셀 등록, 사건 목록 검색·필터, 종결·일괄 삭제 · 현재 등록된 사건{" "}
+            <span className="font-semibold text-slate-900">{fullTotalCount}</span>건
+          </p>
+          <p className="text-xs text-slate-500 mt-0.5">
+            진행중{" "}
+            <span className="font-semibold text-primary-700">
+              {statusSummary.진행중}
+            </span>
+            건 · 종결{" "}
+            <span className="font-semibold text-slate-700">
+              {statusSummary.종결}
+            </span>
+            건 · 사임{" "}
+            <span className="font-semibold text-amber-700">
+              {statusSummary.사임}
+            </span>
+            건
           </p>
         </div>
       </div>
@@ -341,9 +352,19 @@ export default function AdminCasesPage() {
         </label>
         <Link href="/cases/new">
           <Button type="button" variant="outline" size="sm" leftIcon={<Plus size={14} />}>
-            사건 1건 등록
+            사건등록
           </Button>
         </Link>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          leftIcon={actioning ? <Loader2 size={14} className="animate-spin" /> : <ToggleRight size={14} />}
+          disabled={selectedIds.size === 0 || actioning}
+          onClick={() => (selectedIds.size === 0 ? toast.error("사건을 선택하세요.") : setStatusChangeOpen(true))}
+        >
+          진행상태변경
+        </Button>
         <Button
           type="button"
           variant="outline"
@@ -353,7 +374,89 @@ export default function AdminCasesPage() {
         >
           양식 다운로드
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={async () => {
+            try {
+              const res = await fetch("/api/admin/cases/dedupe", { method: "POST" });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "사건 연동에 실패했습니다.");
+              toast.success(data.message || "중복 사건 정리 및 연동이 완료되었습니다.");
+              fetchList();
+              fetchFullTotal();
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "사건 연동에 실패했습니다.");
+            }
+          }}
+        >
+          사건연동
+        </Button>
+        <Button
+          type="button"
+          variant={deleteAllStep === 0 ? "outline" : "destructive"}
+          size="sm"
+          onClick={async () => {
+            if (deleteAllStep === 0) {
+              setDeleteAllStep(1);
+              toast.error("전체 사건 삭제 준비 단계입니다. 정말 모두 삭제하려면 한 번 더 누르세요.");
+              setTimeout(() => setDeleteAllStep(0), 10000);
+              return;
+            }
+            try {
+              const res = await fetch("/api/admin/cases", {
+                method: "DELETE",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ all: true }),
+              });
+              const data = await res.json();
+              if (!res.ok) throw new Error(data.error || "전체 사건 삭제에 실패했습니다.");
+              toast.success(data.message || "전체 사건이 삭제되었습니다.");
+              setDeleteAllStep(0);
+              setList([]);
+              setTotalCount(0);
+              setFullTotalCount(0);
+              setStatusSummary({ 진행중: 0, 종결: 0, 사임: 0 });
+            } catch (e) {
+              toast.error(e instanceof Error ? e.message : "전체 사건 삭제에 실패했습니다.");
+            }
+          }}
+        >
+          {deleteAllStep === 0 ? "전체 사건 삭제" : "정말 전체 삭제"}
+        </Button>
       </div>
+
+      {statusChangeOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setStatusChangeOpen(false)}>
+          <div
+            className="bg-white rounded-xl shadow-lg border border-slate-200 p-5 min-w-[280px]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-semibold text-slate-800">진행상태 변경</h3>
+              <button type="button" onClick={() => setStatusChangeOpen(false)} className="p-1 rounded hover:bg-slate-100 text-slate-500" aria-label="닫기">
+                <X size={18} />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 mb-4">선택한 {selectedIds.size}건을 다음 상태로 변경합니다.</p>
+            <div className="flex gap-2">
+              <Button type="button" size="sm" onClick={() => handleStatusChange("진행중")} className="flex-1">
+                진행중
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => handleStatusChange("종결")} className="flex-1">
+                종결
+              </Button>
+              <Button type="button" size="sm" variant="outline" onClick={() => handleStatusChange("사임")} className="flex-1">
+                사임
+              </Button>
+              <Button type="button" size="sm" variant="ghost" onClick={() => setStatusChangeOpen(false)}>
+                취소
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="bg-white rounded-2xl border border-slate-200 shadow-card overflow-hidden">
         <div className="p-4 border-b border-slate-100 space-y-3">
@@ -469,8 +572,8 @@ export default function AdminCasesPage() {
               <thead>
                 <tr className="bg-slate-50/70 border-b border-slate-200 text-xs font-semibold text-slate-500 uppercase tracking-wide">
                   <th className="w-10 px-3 py-3 text-left">
-                    <button type="button" onClick={toggleSelectAll} className="p-1 rounded hover:bg-slate-200" aria-label="전체 선택">
-                      {selectedIds.size === list.length && list.length > 0 ? <CheckSquare size={18} className="text-primary-600" /> : <Square size={18} className="text-slate-400" />}
+                    <button type="button" onClick={toggleSelectAll} className="p-1 rounded hover:bg-slate-200" aria-label="현재 페이지 전체 선택">
+                      {allDisplaySelected ? <CheckSquare size={18} className="text-primary-600" /> : <Square size={18} className="text-slate-400" />}
                     </button>
                   </th>
                   <th className="text-left px-3 py-3 min-w-[100px]">사건번호</th>
@@ -486,7 +589,7 @@ export default function AdminCasesPage() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((c) => {
+                {displayList.map((c) => {
                   const id = String((c as { id?: string }).id ?? "");
                   const isSelected = selectedIds.has(id);
                   const row = c as CaseRow & { id?: string; nextDate?: string | null };
@@ -520,7 +623,7 @@ export default function AdminCasesPage() {
                         <span
                           className={cn(
                             "px-2 py-0.5 rounded text-xs font-medium",
-                            row.status === "종결" ? "bg-slate-100 text-slate-600" : "bg-primary-100 text-primary-700"
+                            row.status === "종결" ? "bg-slate-100 text-slate-600" : row.status === "사임" ? "bg-amber-50 text-amber-800" : "bg-primary-100 text-primary-700"
                           )}
                         >
                           {row.status ?? "진행중"}
@@ -534,8 +637,38 @@ export default function AdminCasesPage() {
           )}
         </div>
         {list.length > 0 && (
-          <div className="px-4 py-2 border-t border-slate-100 text-xs text-text-muted">
-            전체 {list.length}건 {statusFilter && `(상태: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter})`}
+          <div className="px-4 py-3 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-text-muted">
+              {startItem}–{endItem} / 전체 {list.length}건
+              {statusFilter ? ` (상태: ${STATUS_OPTIONS.find((o) => o.value === statusFilter)?.label ?? statusFilter})` : ""}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                disabled={safePage <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                aria-label="이전 페이지"
+              >
+                <ChevronLeft size={16} />
+              </Button>
+              <span className="px-2 text-xs text-slate-600 min-w-[4rem] text-center">
+                {safePage} / {totalPages}페이지
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 w-8 p-0"
+                disabled={safePage >= totalPages}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                aria-label="다음 페이지"
+              >
+                <ChevronRight size={16} />
+              </Button>
+            </div>
           </div>
         )}
       </div>

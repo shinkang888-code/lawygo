@@ -65,15 +65,23 @@ function toBool(v) {
 function rowToCase(row) {
   const get = (key) => row[key] ?? "";
   const trim = (key) => String(get(key)).trim();
-  const 사건번호 = trim("사건번호");
+  const 사건번호 = trim("사건번호") || trim("키값") || "미등록";
   const 사건명 = trim("사건명");
   const 의뢰인 = trim("의뢰인");
   const 계속기관 = trim("계속기관");
   const 수행 = trim("수행");
   const 수임일Raw = row["수임일"] ?? row["등록일"];
-  let status = "진행중";
   const 특이 = String(get("특이[결과]") ?? "").trim();
-  if (특이.includes("완료") || 특이.includes("종결")) status = "종결";
+  const 진행잔여 = String(get("진행/잔여일") ?? "").trim();
+  const 기일명 = String(get("기일명") ?? "").trim();
+
+  // 종결/완료/종료 키워드가 하나라도 포함되면 종결, 그 외는 진행중
+  let status = "진행중";
+  const closedKeywords = ["종결", "완료", "종료"];
+  const statusSource = [특이, 진행잔여, 기일명].join(" ");
+  if (closedKeywords.some((kw) => statusSource.includes(kw))) {
+    status = "종결";
+  }
 
   const notesParts = [
     trim("기일명"),
@@ -125,8 +133,6 @@ async function main() {
     headers.forEach((h, i) => {
       row[h] = rowArr[i];
     });
-    const 사건번호 = String(row["사건번호"] ?? "").trim();
-    if (!사건번호) continue;
     cases.push(rowToCase(row));
   }
 
@@ -135,9 +141,13 @@ async function main() {
     process.exit(0);
   }
 
-  const { data: existing } = await db.from("cases").select("id");
-  const ids = (existing || []).map((r) => r.id);
-  if (ids.length > 0) {
+  // 기존 사건 전량 삭제 (Supabase select 기본 1000건 제한 있으므로 페이지네이션)
+  let totalDeleted = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data: existing } = await db.from("cases").select("id").range(0, pageSize - 1);
+    const ids = (existing || []).map((r) => r.id);
+    if (ids.length === 0) break;
     const chunk = 100;
     for (let i = 0; i < ids.length; i += chunk) {
       const slice = ids.slice(i, i + chunk);
@@ -147,10 +157,14 @@ async function main() {
         process.exit(1);
       }
     }
-    console.log("기존 사건", ids.length, "건 삭제됨.");
+    totalDeleted += ids.length;
+    if (ids.length < pageSize) break;
+  }
+  if (totalDeleted > 0) {
+    console.log("기존 사건", totalDeleted, "건 삭제됨.");
   }
 
-  const insertChunk = 50;
+  const insertChunk = 100;
   let inserted = 0;
   for (let i = 0; i < cases.length; i += insertChunk) {
     const slice = cases.slice(i, i + insertChunk);
@@ -161,7 +175,7 @@ async function main() {
     }
     inserted += slice.length;
   }
-  console.log("엑셀 데이터", inserted, "건 삽입 완료. 사건 목록이 갱신되었습니다.");
+  console.log("엑셀 데이터", inserted, "건 삽입 완료. (엑셀 행 기준 1:1 반영) 사건 목록이 갱신되었습니다.");
 }
 
 main().catch((e) => {

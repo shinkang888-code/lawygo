@@ -54,6 +54,7 @@ export default function AdminMembersPage() {
 
   const [excelErrors, setExcelErrors] = useState<ExcelRowError[]>([]);
   const [excelErrorModalOpen, setExcelErrorModalOpen] = useState(false);
+  const [excelReplaceMode, setExcelReplaceMode] = useState(false);
   const excelInputRef = useRef<HTMLInputElement>(null);
 
   const fetchMembers = async () => {
@@ -319,10 +320,14 @@ export default function AdminMembersPage() {
       toast.error("엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.");
       return;
     }
+    if (excelReplaceMode && !confirm("기존 직원·회원(관리자 제외)을 모두 삭제한 뒤 엑셀 내용으로 전량 반영합니다. 계속하시겠습니까?")) {
+      return;
+    }
     setActionLoading(true);
     try {
       const formData = new FormData();
       formData.append("file", file);
+      formData.append("replace", excelReplaceMode ? "true" : "false");
       const res = await fetch("/api/admin/members/import-excel", {
         method: "POST",
         credentials: "include",
@@ -339,7 +344,7 @@ export default function AdminMembersPage() {
         }
         return;
       }
-      toast.success(`${data.count ?? 0}명 회원이 등록되었습니다.`);
+      toast.success(data.replaced ? `기존 데이터 삭제 후 ${data.count ?? 0}명 반영되었습니다.` : `${data.count ?? 0}명 회원이 등록되었습니다.`);
       fetchMembers();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "엑셀 등록 실패");
@@ -369,6 +374,15 @@ export default function AdminMembersPage() {
           <Button size="sm" leftIcon={<UserPlus size={14} />} onClick={() => setRegisterOpen(true)}>
             회원등록
           </Button>
+          <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={excelReplaceMode}
+              onChange={(e) => setExcelReplaceMode(e.target.checked)}
+              className="rounded border-slate-300 text-primary-600"
+            />
+            기존 직원 삭제 후 엑셀 전량 반영
+          </label>
           <input
             ref={excelInputRef}
             type="file"
@@ -397,7 +411,7 @@ export default function AdminMembersPage() {
           </Button>
         </div>
       </div>
-      <p className="text-xs text-slate-500 -mt-2">엑셀등록: 직원목록 형식(로그인ID, 이름, 역할 필수 / 비밀번호·관리번호 선택). 형식이 맞지 않으면 등록되지 않습니다. 엑셀다운: 현재 회원목록을 엑셀으로 저장합니다.</p>
+      <p className="text-xs text-slate-500 -mt-2">엑셀등록: 직원목록 형식(로그인ID, 이름, 역할 필수) 또는 user_lawygo 형식(성명, ID, 사용자유형, 소속부서, 이메일, 이동전화 등). &quot;기존 직원 삭제 후 엑셀 전량 반영&quot; 체크 시 관리자 제외 전원 삭제 후 엑셀 내용으로 DB 갱신.</p>
 
       {/* 회원 등록 폼 (접이식) */}
       {registerOpen && (

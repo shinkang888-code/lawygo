@@ -71,5 +71,7 @@ export function applyOverrides<T extends CaseItem>(caseItem: T): T {
   const overrides = getCaseOverride(caseItem.id);
   const courts = loadCourtOverrides();
   const court = courts[caseItem.id] ?? overrides?.court ?? caseItem.court;
-  return { ...caseItem, ...overrides, court } as T;
+  // 상태(status)는 항상 DB 값을 신뢰하고, 로컬 override가 있더라도 덮어쓰지 않는다.
+  const { status: _ignoredStatus, ...restOverrides } = overrides ?? {};
+  return { ...caseItem, ...restOverrides, court } as T;
 }

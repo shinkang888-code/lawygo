@@ -9,38 +9,15 @@ import type { ClientItem } from "@/lib/types";
 
 const STORAGE_KEY = "lawygo_clients";
 
-const SEED_NAMES = [
-  "이창우", "주식회사 테크원", "박성철", "최민서", "황지수",
-  "김철수", "이영희", "박민수", "최지현", "정대호", "강미라", "조성훈", "윤서아", "한동훈", "오세훈",
-  "주식회사 A", "주식회사 B", "(유)테크원", "개인 C", "D건설", "E금융", "F보험", "G물류", "H제약", "I전자",
-];
-
-function generateSeedClients(): ClientItem[] {
-  const now = new Date().toISOString();
-  return SEED_NAMES.map((name, i) => ({
-    id: `client-${i + 1}`,
-    name,
-    phone: i % 3 === 0 ? `02-1234-${String(1000 + i).padStart(4, "0")}` : undefined,
-    mobile: `010-${String(1000 + i).padStart(4, "0")}-${String(5000 + i).padStart(4, "0")}`,
-    email: i % 2 === 0 ? `client${i + 1}@example.com` : undefined,
-    address: i % 4 === 0 ? `서울시 강남구 테헤란로 ${100 + i}번지` : undefined,
-    memo: "",
-    createdAt: now,
-    updatedAt: now,
-  }));
-}
-
-const DEFAULT_CLIENTS: ClientItem[] = generateSeedClients();
-
 function loadRaw(): ClientItem[] {
-  if (typeof window === "undefined") return DEFAULT_CLIENTS;
+  if (typeof window === "undefined") return [];
   try {
     const s = localStorage.getItem(STORAGE_KEY);
-    if (!s) return DEFAULT_CLIENTS;
+    if (!s) return [];
     const parsed = JSON.parse(s);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_CLIENTS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return DEFAULT_CLIENTS;
+    return [];
   }
 }
 

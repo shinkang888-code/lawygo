@@ -56,7 +56,7 @@ function generateDemoCases(): CaseItem[] {
   const clients = ["김철수", "이영희", "박민수", "최지현", "정대호", "강미라", "조성훈", "윤서아", "한동훈", "오세훈", "주식회사 A", "주식회사 B", "(유)테크원", "개인 C", "D건설", "E금융", "F보험", "G물류", "H제약", "I전자"];
   const positions = ["원고", "피고", "피고인", "청구인", "피청구인", "채권자", "채무자"];
   const staff = ["김민준", "이서연", "박지훈"];
-  const statuses: CaseItem["status"][] = ["진행중", "진행중", "진행중", "보류", "완료"];
+  const statuses: CaseItem["status"][] = ["진행중", "진행중", "진행중", "종결", "사임"];
   const dateTypes = ["선고기일", "변론기일", "심문기일", "공판기일", "진술기일", "제출기일"];
   const list: CaseItem[] = [];
   for (let i = 1; i <= 100; i++) {
@@ -66,7 +66,7 @@ function generateDemoCases(): CaseItem[] {
     const court = courts[i % courts.length];
     const client = clients[i % clients.length];
     const status = statuses[i % statuses.length];
-    const nextOffset = status === "완료" ? 0 : (i % 30) + 1;
+    const nextOffset = status === "종결" || status === "사임" ? 0 : (i % 30) + 1;
     const iso = `${year}-${String((i % 12) + 1).padStart(2, "0")}-${String((i % 28) + 1).padStart(2, "0")}`;
     list.push({
       id: `demo-${i}`,
@@ -80,8 +80,8 @@ function generateDemoCases(): CaseItem[] {
       status,
       assignedStaff: staff[i % staff.length],
       assistants: i % 3 === 0 ? "정수경" : i % 3 === 1 ? "최연진, 정수경" : "강이소",
-      nextDate: status === "완료" ? null : addDays(nextOffset),
-      nextDateType: status === "완료" ? "" : dateTypes[i % dateTypes.length],
+      nextDate: status === "종결" || status === "사임" ? null : addDays(nextOffset),
+      nextDateType: status === "종결" || status === "사임" ? "" : dateTypes[i % dateTypes.length],
       isElectronic: i % 3 === 0,
       isUrgent: i % 5 === 0,
       isImmutable: i % 7 === 0,
@@ -232,7 +232,7 @@ const baseCases: CaseItem[] = [
     clientName: "시민단체 정의연대",
     clientPosition: "청구인",
     opponentName: "국가",
-    status: "보류",
+    status: "종결",
     assignedStaff: "김민준",
     assistants: "강이소",
     nextDate: addDays(30),
@@ -257,7 +257,7 @@ const baseCases: CaseItem[] = [
     clientName: "황지수",
     clientPosition: "원고",
     opponentName: "김대현",
-    status: "완료",
+    status: "종결",
     assignedStaff: "이서연",
     assistants: "정수경",
     nextDate: null,
@@ -483,7 +483,9 @@ function generateMockApprovals(): ApprovalDoc[] {
   return list.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
 }
 
-export const mockApprovals: ApprovalDoc[] = generateMockApprovals();
+// 전자결재 더미데이터는 실제 사용 시 혼동을 줄이기 위해 기본값을 비워 둔다.
+// 필요 시 API 연동 또는 별도 시드에서 주입한다.
+export const mockApprovals: ApprovalDoc[] = [];
 
 export const mockDashboardStats: DashboardStats = {
   todayDeadlines: 1,

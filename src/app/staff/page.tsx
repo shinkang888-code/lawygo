@@ -19,6 +19,8 @@ export default function StaffPage() {
   const [page, setPage] = useState(1);
   const [excelErrors, setExcelErrors] = useState<ExcelValidationError[]>([]);
   const [excelErrorModalOpen, setExcelErrorModalOpen] = useState(false);
+  const [excelReplaceMode, setExcelReplaceMode] = useState(false);
+  const [excelUploading, setExcelUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [syncLoading, setSyncLoading] = useState(false);
   const staffListRef = useRef<StaffMember[]>(staffList);
@@ -190,10 +192,15 @@ export default function StaffPage() {
       toast.error("엑셀 파일(.xlsx, .xls)만 업로드할 수 있습니다.");
       return;
     }
+    if (excelReplaceMode && !confirm("기존 직원·회원(관리자 제외)을 모두 삭제한 뒤 엑셀 내용으로 전량 반영합니다. 계속하시겠습니까?")) {
+      return;
+    }
 
-    // 엑셀을 /api/admin/members/import-excel 로 전송해 DB에 저장
     const formData = new FormData();
     formData.append("file", file);
+    formData.append("replace", excelReplaceMode ? "true" : "false");
+
+    setExcelUploading(true);
     try {
       const res = await fetch("/api/admin/members/import-excel", {
         method: "POST",
@@ -203,7 +210,6 @@ export default function StaffPage() {
       const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        // 검증 오류가 있으면 오류 모달 표시
         const errors = (data as { errors?: ExcelValidationError[] }).errors;
         if (errors && errors.length > 0) {
           setExcelErrors(errors);
@@ -215,11 +221,13 @@ export default function StaffPage() {
       }
 
       const count = (data as { count?: number }).count ?? 0;
-      toast.success(`${count}명이 직원으로 등록되었습니다. 목록을 새로고침합니다.`);
-      // DB에 저장 완료 후 직원 목록을 다시 불러옴
+      const replaced = (data as { replaced?: boolean }).replaced;
+      toast.success(replaced ? `기존 데이터 삭제 후 ${count}명 반영되었습니다.` : `${count}명이 직원으로 등록되었습니다. 목록을 새로고침합니다.`);
       fetchStaffList();
     } catch {
       toast.error("엑셀 업로드 중 오류가 발생했습니다.");
+    } finally {
+      setExcelUploading(false);
     }
   };
 
@@ -302,6 +310,15 @@ export default function StaffPage() {
           >
             양식 다운로드
           </Button>
+          <label className="flex items-center gap-2 text-xs text-slate-600 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={excelReplaceMode}
+              onChange={(e) => setExcelReplaceMode(e.target.checked)}
+              className="rounded border-slate-300 text-primary-600"
+            />
+            기존 직원 삭제 후 엑셀 전량 반영
+          </label>
           <input
             ref={excelInputRef}
             type="file"
@@ -309,8 +326,8 @@ export default function StaffPage() {
             className="hidden"
             onChange={handleExcelFileChange}
           />
-          <Button size="sm" variant="outline" leftIcon={<FileUp size={14} />} onClick={handleExcelAddClick}>
-            엑셀 추가
+          <Button size="sm" variant="outline" leftIcon={<FileUp size={14} />} onClick={handleExcelAddClick} disabled={excelUploading}>
+            {excelUploading ? "반영 중…" : "엑셀 추가"}
           </Button>
           <Button
             size="sm"

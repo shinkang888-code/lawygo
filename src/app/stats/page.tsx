@@ -38,10 +38,8 @@ export default function StatsPage() {
 
   const statusColors: Record<string, string> = {
     진행중: "bg-primary-500",
-    완료: "bg-success-500",
-    보류: "bg-warning-500",
-    취하: "bg-slate-400",
     종결: "bg-slate-300",
+    사임: "bg-slate-400",
   };
 
   return (
@@ -144,7 +142,7 @@ export default function StatsPage() {
         <div className="bg-white rounded-2xl border border-slate-200 shadow-card p-5">
           <h3 className="text-sm font-semibold text-slate-800 mb-4">진행 상태별</h3>
           <div className="space-y-3">
-            {["진행중", "완료", "보류", "취하"].map((status) => {
+            {["진행중", "종결", "사임"].map((status) => {
               const count = byStatus[status] ?? 0;
               return (
                 <div key={status} className="flex items-center justify-between">

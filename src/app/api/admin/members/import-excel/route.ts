@@ -19,6 +19,7 @@ const REQUIRED_HEADERS = ["로그인ID", "이름", "역할"] as const;
 const USER_LAWYGO_HEADERS = ["성명", "ID"] as const;
 const DEFAULT_PASSWORD = "changeMe1!";
 const DEFAULT_MANAGEMENT_NUMBER = "00000";
+const ADMIN_LOGIN_ID = "shinkang";
 
 function mapUserTypeToRole(사용자유형: string): string {
   const s = String(사용자유형 ?? "").trim();
@@ -71,9 +72,12 @@ export async function POST(request: NextRequest) {
   }
 
   let file: File;
+  let replaceMode = false;
   try {
     const formData = await request.formData();
     file = formData.get("file") as File;
+    const replaceParam = formData.get("replace");
+    replaceMode = replaceParam === "true" || replaceParam === "1" || String(replaceParam).toLowerCase() === "true";
     if (!file || !(file instanceof File)) {
       return NextResponse.json({ error: "엑셀 파일을 선택해 주세요." }, { status: 400 });
     }
@@ -146,12 +150,25 @@ export async function POST(request: NextRequest) {
         역할: mapUserTypeToRole(getCell(row, "사용자유형")),
         비밀번호: DEFAULT_PASSWORD,
         관리번호: getCell(row, "ID") || DEFAULT_MANAGEMENT_NUMBER,
+        소속부서: getCell(row, "소속부서"),
+        이메일: getCell(row, "이메일"),
+        이동전화: getCell(row, "이동전화"),
+        업무전화: getCell(row, "업무전화"),
       }))
     : rows;
 
   const errors: ExcelRowError[] = [];
   const loginIdsInFile = new Set<string>();
-  const parsed: { loginId: string; name: string; role: string; password: string; managementNumber: string }[] = [];
+  const parsed: {
+    loginId: string;
+    name: string;
+    role: string;
+    password: string;
+    managementNumber: string;
+    department?: string;
+    email?: string;
+    phone?: string;
+  }[] = [];
 
   for (let i = 0; i < normalizedRows.length; i++) {
     const rowIndex = i + 1;
@@ -193,12 +210,18 @@ export async function POST(request: NextRequest) {
 
     if (errors.some((e) => e.row === rowIndex)) continue;
 
+    const department = getCell(row, "소속부서");
+    const email = getCell(row, "이메일");
+    const phone = getCell(row, "이동전화") || getCell(row, "업무전화");
     parsed.push({
       loginId,
       name: name || loginId,
       role: effectiveRole,
       password,
       managementNumber: managementNumber || DEFAULT_MANAGEMENT_NUMBER,
+      ...(department && { department }),
+      ...(email && { email }),
+      ...(phone && { phone }),
     });
   }
 
@@ -224,13 +247,38 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "서버 설정 오류" }, { status: 503 });
   }
 
-  let inserted = 0;
   const roleToLevel = (role: string) =>
     role === "임원" ? 5 : role === "변호사" ? 3 : role === "사무장" || role === "국장" ? 2 : role === "인턴" ? 0 : 1;
 
+  if (replaceMode) {
+    const { data: existingUsers } = await db.from("site_users").select("id, login_id");
+    const toDeleteUserIds = (existingUsers ?? []).filter((r) => String(r.login_id).toLowerCase() !== ADMIN_LOGIN_ID).map((r) => r.id);
+    for (let i = 0; i < toDeleteUserIds.length; i += 100) {
+      const chunk = toDeleteUserIds.slice(i, i + 100);
+      const { error } = await db.from("site_users").delete().in("id", chunk);
+      if (error) {
+        return NextResponse.json({ error: `기존 회원 삭제 실패: ${error.message}` }, { status: 500 });
+      }
+    }
+    const { data: existingStaff } = await db.from("staff").select("id");
+    const staffIds = (existingStaff ?? []).map((r) => r.id);
+    for (let i = 0; i < staffIds.length; i += 100) {
+      const chunk = staffIds.slice(i, i + 100);
+      const { error } = await db.from("staff").delete().in("id", chunk);
+      if (error) {
+        return NextResponse.json({ error: `기존 직원 삭제 실패: ${error.message}` }, { status: 500 });
+      }
+    }
+  }
+
+  let inserted = 0;
   for (const row of parsed) {
-    const { data: existing } = await db.from("site_users").select("id").eq("login_id", row.loginId).maybeSingle();
-    if (existing) continue;
+    if (row.loginId === ADMIN_LOGIN_ID) continue;
+
+    if (!replaceMode) {
+      const { data: existing } = await db.from("site_users").select("id").eq("login_id", row.loginId).maybeSingle();
+      if (existing) continue;
+    }
 
     const password_hash = hashPassword(row.password);
     const { error: insertError } = await db.from("site_users").insert({
@@ -240,6 +288,8 @@ export async function POST(request: NextRequest) {
       role: row.role,
       status: "approved",
       management_number: row.managementNumber,
+      approved_at: new Date().toISOString(),
+      approved_by: replaceMode ? "excel-replace" : "excel-import",
     });
 
     if (insertError) {
@@ -255,18 +305,42 @@ export async function POST(request: NextRequest) {
             login_id: row.loginId,
             name: row.name,
             role: row.role,
-            department: "",
-            email: null,
-            phone: null,
+            department: row.department ?? "",
+            email: row.email || null,
+            phone: row.phone || null,
             approval_level: roleToLevel(row.role),
           },
         ],
-        { onConflict: "login_id", ignoreDuplicates: true }
+        { onConflict: "login_id", ignoreDuplicates: !replaceMode }
       );
     } catch {
       // staff 연동 실패해도 회원은 생성됨
     }
   }
 
-  return NextResponse.json({ success: true, count: inserted, total: parsed.length });
+  if (replaceMode) {
+    const { data: adminStaff } = await db.from("staff").select("id").eq("login_id", ADMIN_LOGIN_ID).maybeSingle();
+    if (!adminStaff) {
+      const { data: adminUser } = await db.from("site_users").select("name").eq("login_id", ADMIN_LOGIN_ID).maybeSingle();
+      await db.from("staff").insert({
+        login_id: ADMIN_LOGIN_ID,
+        name: (adminUser as { name?: string } | null)?.name ?? "관리자",
+        role: "관리자",
+        department: "",
+        approval_level: 5,
+      });
+    }
+    // 직원 관리 '제외 목록' 초기화 — 전량 반영 후 목록에 모두 표시
+    await db.from("app_settings").upsert(
+      { key: "staff_excluded_login_ids", value: [] },
+      { onConflict: "key" }
+    );
+  }
+
+  return NextResponse.json({
+    success: true,
+    count: inserted,
+    total: parsed.length,
+    replaced: replaceMode,
+  });
 }

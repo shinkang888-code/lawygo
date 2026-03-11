@@ -41,6 +41,10 @@ export async function GET(request: NextRequest) {
 
   const list = (data ?? []).map((r: Record<string, unknown>) => {
     const casesRow = r.cases as Record<string, unknown> | null;
+    const rawMemo = (r.memo ?? "") as string;
+    let assignedStaff = "";
+    const m = rawMemo.match(/담당자:\s*([^/·]+)/);
+    if (m) assignedStaff = m[1].trim();
     return {
       id: r.id,
       caseId: r.case_id,
@@ -48,7 +52,8 @@ export async function GET(request: NextRequest) {
       date: r.deadline_date,
       type: r.deadline_type,
       court: r.court ?? "",
-      memo: r.memo ?? "",
+      memo: rawMemo,
+      assignedStaff,
       isImmutable: Boolean(r.is_immutable),
       completedAt: r.completed_at,
       createdAt: r.created_at,

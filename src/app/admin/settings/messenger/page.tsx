@@ -12,6 +12,8 @@ interface MessengerSettings {
   aligoKey: string;
   aligoUserId: string;
   aligoSender: string;
+  kakaoGatewayIp: string;
+  kakaoGatewayApikey: string;
   kakaoBizAccessToken: string;
   kakaoSenderKey: string;
   telegramBotToken: string;
@@ -25,6 +27,8 @@ const defaults: MessengerSettings = {
   aligoKey: "",
   aligoUserId: "",
   aligoSender: "",
+  kakaoGatewayIp: "",
+  kakaoGatewayApikey: "",
   kakaoBizAccessToken: "",
   kakaoSenderKey: "",
   telegramBotToken: "",
@@ -38,6 +42,8 @@ const FIELDS: { key: keyof MessengerSettings; label: string; placeholder: string
   { key: "aligoKey", label: "알리고 API Key", placeholder: "알리고 인증 키" },
   { key: "aligoUserId", label: "알리고 User ID", placeholder: "알리고 사용자 ID" },
   { key: "aligoSender", label: "알리고 발신번호", placeholder: "010-0000-0000" },
+  { key: "kakaoGatewayIp", label: "카카오톡 연동 서버 IP", placeholder: "121.166.75.165 (또는 IP:포트)" },
+  { key: "kakaoGatewayApikey", label: "카카오톡 연동 API Key", placeholder: "게이트웨이 발급 API 키" },
   { key: "kakaoBizAccessToken", label: "카카오톡 비즈 액세스 토큰", placeholder: "카카오 비즈메시지 토큰" },
   { key: "kakaoSenderKey", label: "카카오톡 발신 키", placeholder: "발신 프로필 키" },
   { key: "telegramBotToken", label: "텔레그램 봇 토큰", placeholder: "Bot token from @BotFather" },

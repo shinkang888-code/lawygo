@@ -13,7 +13,7 @@ import { appendCaseHistory } from "@/lib/caseHistoryStorage";
 
 const caseTypes = ["형사", "민사", "행정", "헌법", "가사", "파산/회생", "기타"];
 const positions = ["피고인", "원고", "피고", "신청인", "피신청인", "채권자", "채무자", "청구인", "피청구인", "고소인"];
-const statuses: CaseItem["status"][] = ["진행중", "완료", "보류", "취하", "종결"];
+const statuses: CaseItem["status"][] = ["진행중", "종결", "사임"];
 
 function getCurrentAccount(): string {
   if (typeof window === "undefined") return "관리자";

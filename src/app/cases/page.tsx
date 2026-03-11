@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
@@ -21,12 +21,14 @@ import {
   Trash2,
   FolderPlus,
   Upload,
+  FileSpreadsheet,
   Pencil,
   ExternalLink,
   GripVertical,
 } from "lucide-react";
 import { copyAndOpenScourtSearch } from "@/lib/scourtLinks";
-import { mockCases, mockTimeline } from "@/lib/mockData";
+import { mockTimeline } from "@/lib/mockData";
+import { parseExcelFileToCases } from "@/lib/caseExcel";
 import { cn, formatDate, getDDay } from "@/lib/utils";
 import type { CaseItem, FilterConfig, SortConfig, Timeline } from "@/lib/types";
 import {
@@ -75,7 +77,7 @@ function getCurrentAccount(): string {
   }
 }
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 20;
 
 const columns: { key: keyof CaseItem; label: string; width?: string; sortable?: boolean }[] = [
   { key: "caseNumber", label: "사건번호", width: "140px", sortable: true },
@@ -106,14 +108,87 @@ export default function CasesPage() {
       setAppliedSearch(q);
     }
   }, [searchParams]);
-  const [filters, setFilters] = useState<FilterConfig[]>([]);
+  // 기본 필터: 처음에는 진행중 사건만 보이도록 설정
+  const [filters, setFilters] = useState<FilterConfig[]>([
+    {
+      field: "status",
+      operator: "equals",
+      value: "진행중",
+      label: "진행상태: 진행중",
+    },
+  ]);
   const [sort, setSort] = useState<SortConfig>({ field: "nextDate", direction: "asc" });
   const [selectedCase, setSelectedCase] = useState<CaseItem | null>(null);
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"table" | "card">("table");
-  const [isLoading] = useState(false);
+  const [caseList, setCaseList] = useState<CaseItem[]>([]);
+  const [caseListLoading, setCaseListLoading] = useState(true);
+  const [caseListError, setCaseListError] = useState<string | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [listRefreshKey, setListRefreshKey] = useState(0);
+  const [excelUploading, setExcelUploading] = useState(false);
+  const excelInputRef = useRef<HTMLInputElement>(null);
+
+  const fetchCaseList = useCallback(() => {
+    setCaseListLoading(true);
+    setCaseListError(null);
+    const params = new URLSearchParams();
+    params.set("page", String(currentPage));
+    params.set("page_size", String(PAGE_SIZE));
+    if (appliedSearch.trim()) params.set("q", appliedSearch.trim());
+    fetch(`/api/admin/cases?${params.toString()}`, { credentials: "include" })
+      .then((r) => r.json())
+      .then((json: { data?: CaseItem[]; total?: number; error?: string }) => {
+        if (json.error) {
+          setCaseListError(json.error);
+          setCaseList([]);
+          setTotalCount(0);
+        } else {
+          setCaseList(Array.isArray(json.data) ? json.data : []);
+          setTotalCount(typeof json.total === "number" ? json.total : (json.data?.length ?? 0));
+        }
+      })
+      .catch(() => {
+        setCaseListError("사건 목록을 불러올 수 없습니다.");
+        setCaseList([]);
+        setTotalCount(0);
+      })
+      .finally(() => setCaseListLoading(false));
+  }, [currentPage, appliedSearch]);
+
+  useEffect(() => {
+    fetchCaseList();
+  }, [listRefreshKey, fetchCaseList]);
+
+  const handleExcelUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setExcelUploading(true);
+    try {
+      const items = await parseExcelFileToCases(file);
+      if (items.length === 0) {
+        toast.error("엑셀에서 사건 데이터를 찾을 수 없습니다. 첫 행에 헤더(사건번호, 의뢰인 등)가 있어야 합니다.");
+        return;
+      }
+      const res = await fetch("/api/admin/cases", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items }),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "등록 실패");
+      toast.success(data.message || `${items.length}건 등록되었습니다.`);
+      setCurrentPage(1);
+      setListRefreshKey((k) => k + 1);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "엑셀 등록 실패");
+    } finally {
+      setExcelUploading(false);
+      e.target.value = "";
+    }
+  };
 
   // 사건별 메모/자료실 데이터 (localStorage 연동)
   const [caseMemos, setCaseMemos] = useState<Record<string, Timeline[]>>(() =>
@@ -159,7 +234,7 @@ export default function CasesPage() {
 
   const filtered = useMemo(() => {
     const permDeleted = getPermanentDeletedIds();
-    const withOverrides = mockCases
+    const withOverrides = caseList
       .filter((c) => !permDeleted.has(c.id))
       .map((c) => applyOverrides(c));
     let result = [...withOverrides];
@@ -202,7 +277,7 @@ export default function CasesPage() {
     });
 
     return result;
-  }, [appliedSearch, appliedStaffSearch, filters, sort, listRefreshKey]);
+  }, [caseList, appliedSearch, appliedStaffSearch, filters, sort, listRefreshKey]);
 
   useEffect(() => {
     const onMessage = (e: MessageEvent) => {
@@ -279,11 +354,8 @@ export default function CasesPage() {
     window.open("/cases/history", "case-history", `width=${w},height=${h},left=${left},top=${top},scrollbars=yes,resizable=yes`);
   };
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const paginatedList = useMemo(() => {
-    const start = (currentPage - 1) * PAGE_SIZE;
-    return filtered.slice(start, start + PAGE_SIZE);
-  }, [filtered, currentPage]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const paginatedList = useMemo(() => filtered, [filtered]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -396,13 +468,21 @@ export default function CasesPage() {
           <div className="flex items-center gap-2 shrink-0">
             <h1 className="text-base font-bold text-slate-900">사건 관리</h1>
             <span className="text-xs text-text-muted">
-              {appliedSearch.trim() || appliedStaffSearch.trim() ? "검색 " : "전체 "}
-              <span className="text-primary-600 font-semibold">{filtered.length}</span>건
+              {appliedSearch.trim() ? "검색 " : "전체 "}
+              <span className="text-primary-600 font-semibold">
+                {appliedStaffSearch.trim() || filters.length ? filtered.length : totalCount}
+              </span>
+              건
               {selectedRows.size > 0 && (
                 <span className="ml-1 text-primary-600 font-semibold">· {selectedRows.size}건 선택</span>
               )}
             </span>
           </div>
+          {caseListError && (
+            <div className="w-full text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+              {caseListError}
+            </div>
+          )}
 
           {/* 검색: 사건번호/의뢰인/사건명 */}
           <div className="relative flex-1 min-w-[180px] max-w-[280px]">
@@ -511,8 +591,8 @@ export default function CasesPage() {
         </div>
       </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-auto">
+      {/* Content: 사건 목록 우선 표시, 남는 공간 채움 */}
+      <div className="flex-1 min-h-0 overflow-auto">
         {viewMode === "table" ? (
           <table className="w-full border-collapse">
             <thead className="sticky top-0 z-10">
@@ -547,7 +627,7 @@ export default function CasesPage() {
               </tr>
             </thead>
             <tbody>
-              {isLoading
+              {caseListLoading
                 ? Array.from({ length: 8 }).map((_, i) => <CaseRowSkeleton key={i} />)
                 : paginatedList.map((c) => {
                     const dday = c.nextDate ? getDDay(c.nextDate) : null;
@@ -713,7 +793,7 @@ export default function CasesPage() {
         {filtered.length > 0 && totalPages > 1 && (
           <div className="sticky bottom-0 left-0 right-0 flex items-center justify-between gap-4 px-4 py-3 bg-white border-t border-slate-200 shrink-0">
             <div className="text-xs text-slate-500">
-              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, filtered.length)} / {filtered.length}건
+              {(currentPage - 1) * PAGE_SIZE + 1}-{Math.min(currentPage * PAGE_SIZE, totalCount)} / {totalCount}건
             </div>
             <div className="flex items-center gap-1">
               <Button
@@ -774,19 +854,48 @@ export default function CasesPage() {
           </div>
         )}
 
-        {filtered.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
-              <Search size={24} className="text-slate-400" />
-            </div>
-            <div className="text-lg font-semibold text-slate-600">검색 결과가 없습니다</div>
-            <div className="text-sm text-text-muted mt-1">다른 검색어나 필터를 시도해보세요</div>
+        {filtered.length === 0 && !caseListLoading && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            {caseList.length === 0 ? (
+              <>
+                <div className="w-16 h-16 bg-primary-50 rounded-full flex items-center justify-center mb-4">
+                  <FileSpreadsheet size={28} className="text-primary-600" />
+                </div>
+                <div className="text-lg font-semibold text-slate-700">등록된 사건이 없습니다</div>
+                <p className="text-sm text-text-muted mt-1 max-w-sm">엑셀 파일(.xlsx, .xls)을 등록하면 사건 목록에 반영됩니다.</p>
+                <label className="mt-4 inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-primary-600 text-white text-sm font-medium cursor-pointer hover:bg-primary-700 transition-colors">
+                  <input
+                    type="file"
+                    ref={excelInputRef}
+                    accept=".xlsx,.xls,.csv"
+                    className="hidden"
+                    onChange={handleExcelUpload}
+                    disabled={excelUploading}
+                  />
+                  {excelUploading ? (
+                    <span>등록 중...</span>
+                  ) : (
+                    <>
+                      <Upload size={18} /> 엑셀으로 사건 등록
+                    </>
+                  )}
+                </label>
+              </>
+            ) : (
+              <>
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
+                  <Search size={24} className="text-slate-400" />
+                </div>
+                <div className="text-lg font-semibold text-slate-600">검색 결과가 없습니다</div>
+                <div className="text-sm text-text-muted mt-1">다른 검색어나 필터를 시도해보세요</div>
+              </>
+            )}
           </div>
         )}
       </div>
 
-      {/* 항상 표시: 좌하단 메모장, 우하단 자료실 (사건 선택 시 해당 사건 데이터로 갱신) */}
-      <div className="border-t border-slate-200 bg-slate-50 px-6 py-4 grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[300px] max-h-[380px] shrink-0">
+      {/* 좌하단 메모장, 우하단 자료실: 공간 부족 시 유동적으로 축소 */}
+      <div className="border-t border-slate-200 bg-slate-50 px-4 py-3 grid grid-cols-1 lg:grid-cols-2 gap-3 min-h-[140px] max-h-[320px] shrink overflow-hidden">
         <CaseMemoPanel
           caseItem={selectedCase}
           memos={selectedCase ? caseMemos[selectedCase.id] ?? [] : []}
@@ -875,7 +984,7 @@ function CaseMemoPanel({
 
   if (!caseItem) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px] items-center justify-center text-slate-500">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-0 flex-1 items-center justify-center text-slate-500 overflow-auto">
         <MessageSquare size={32} className="mb-2 text-slate-300" />
         <p className="text-sm font-medium">좌하단 메모장</p>
         <p className="text-xs text-text-muted mt-0.5">사건을 선택하면 해당 사건의 메모가 여기에 표시됩니다.</p>
@@ -884,7 +993,7 @@ function CaseMemoPanel({
   }
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px]">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-0 flex-1 overflow-hidden">
       <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 flex-wrap">
           <MessageSquare size={16} className="text-primary-600" />
@@ -1067,7 +1176,7 @@ function CaseDocumentsPanel({
 
   if (!caseItem) {
     return (
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px] items-center justify-center text-slate-500">
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-0 flex-1 items-center justify-center text-slate-500 overflow-auto">
         <FileIcon size={32} className="mb-2 text-slate-300" />
         <p className="text-sm font-medium">우하단 자료실</p>
         <p className="text-xs text-text-muted mt-0.5">사건을 선택하면 해당 사건의 파일·폴더가 여기에 표시됩니다.</p>
@@ -1242,8 +1351,8 @@ function CaseDocumentsPanel({
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-[260px]">
-      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2">
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-card flex flex-col min-h-0 flex-1 overflow-hidden">
+      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between flex-wrap gap-2 shrink-0">
         <div className="flex items-center gap-2 text-sm font-semibold text-slate-800 flex-wrap">
           <FileIcon size={16} className="text-primary-600" />
           자료실 · {caseItem.caseNumber}

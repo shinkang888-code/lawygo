@@ -1,5 +1,7 @@
 /**
- * 카카오톡 발송 (카카오 비즈 메시지 알림톡 API)
+ * 카카오톡 발송
+ * 1) 카카오 연동 서버(게이트웨이) IP + API Key가 있으면 해당 서버로 발송
+ * 2) 없으면 카카오 비즈 메시지 알림톡 API 사용
  * POST body: { receivers: string[], message: string }
  * env 우선, 없으면 시스템 설정 > 메신저 연동관리(DB)에서 읽음
  */
@@ -7,7 +9,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAppSetting } from "@/lib/appSettingsServer";
 
-async function getKakaoConfig(): Promise<{ accessToken: string; senderKey: string; templateCode?: string }> {
+type GatewayConfig = { gatewayIp: string; gatewayApikey: string };
+type BizConfig = { accessToken: string; senderKey: string; templateCode?: string };
+
+async function getKakaoGatewayConfig(): Promise<GatewayConfig> {
+  const ip = process.env.KAKAO_GATEWAY_IP ?? "";
+  const apikey = process.env.KAKAO_GATEWAY_APIKEY ?? "";
+  if (ip && apikey) return { gatewayIp: ip.trim(), gatewayApikey: apikey };
+  const stored = await getAppSetting<{ kakaoGatewayIp?: string; kakaoGatewayApikey?: string }>("messenger_settings");
+  return {
+    gatewayIp: (stored?.kakaoGatewayIp ?? ip).trim(),
+    gatewayApikey: stored?.kakaoGatewayApikey ?? apikey,
+  };
+}
+
+async function getKakaoBizConfig(): Promise<BizConfig> {
   const accessToken = process.env.KAKAO_BIZ_ACCESS_TOKEN ?? "";
   const senderKey = process.env.KAKAO_BIZ_SENDER_KEY ?? "";
   const templateCode = process.env.KAKAO_BIZ_TEMPLATE_CODE;
@@ -21,18 +37,8 @@ async function getKakaoConfig(): Promise<{ accessToken: string; senderKey: strin
 }
 
 export async function POST(request: NextRequest) {
-  const { accessToken, senderKey, templateCode } = await getKakaoConfig();
-
-  if (!accessToken || !senderKey) {
-    return NextResponse.json(
-      {
-        error:
-          "카카오톡 연동이 설정되지 않았습니다. 시스템 설정 > 메신저 연동관리에서 카카오 비즈 액세스 토큰·발신 키를 입력하세요. " +
-          "카카오 비즈니스 채널·알림톡 템플릿 등록이 필요합니다.",
-      },
-      { status: 503 }
-    );
-  }
+  const gateway = await getKakaoGatewayConfig();
+  const useGateway = gateway.gatewayIp.length > 0 && gateway.gatewayApikey.length > 0;
 
   let body: { receivers?: string[]; message?: string };
   try {
@@ -63,11 +69,71 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "유효한 수신 번호가 없습니다." }, { status: 400 });
   }
 
-  // 카카오 비즈 메시지 API (알림톡) - 템플릿 코드 필수인 경우가 많음
-  const baseUrl = process.env.KAKAO_BIZ_BASE_URL ?? "https://bizmsg-web.kakaoenterprise.com";
-  const sendUrl = `${baseUrl}/v2/send/kakao`;
-
   const results: { phone: string; success: boolean; error?: string }[] = [];
+
+  // 1) 카카오 연동 서버(게이트웨이) 사용
+  if (useGateway) {
+    const baseUrl = gateway.gatewayIp.includes("://")
+      ? gateway.gatewayIp
+      : `http://${gateway.gatewayIp}`;
+    const sendPath = process.env.KAKAO_GATEWAY_PATH ?? "/send";
+    const sendUrl = `${baseUrl.replace(/\/$/, "")}${sendPath.startsWith("/") ? sendPath : `/${sendPath}`}`;
+
+    for (const phone of phones) {
+      try {
+        const res = await fetch(sendUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-API-Key": gateway.gatewayApikey,
+          },
+          body: JSON.stringify({ receivers: [phone], message }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { success?: boolean; error?: string; code?: string };
+        const ok = res.ok && (data.success === true || data.code === "200" || data.code === "100");
+        if (ok) {
+          results.push({ phone, success: true });
+        } else {
+          results.push({
+            phone,
+            success: false,
+            error: (data as { error?: string }).error ?? data?.code ?? res.statusText,
+          });
+        }
+      } catch (e) {
+        results.push({
+          phone,
+          success: false,
+          error: e instanceof Error ? e.message : "요청 실패",
+        });
+      }
+    }
+
+    const successCnt = results.filter((r) => r.success).length;
+    if (successCnt === 0) {
+      return NextResponse.json(
+        { error: "카카오톡 발송에 실패했습니다.", details: results },
+        { status: 502 }
+      );
+    }
+    return NextResponse.json({
+      message: `${successCnt}건 발송 요청되었습니다.`,
+      success_cnt: successCnt,
+      results,
+    });
+  }
+
+  // 2) 카카오 비즈 메시지 API (알림톡)
+  const { accessToken, senderKey, templateCode } = await getKakaoBizConfig();
+  if (!accessToken || !senderKey) {
+    return NextResponse.json(
+      {
+        error:
+          "카카오톡 연동이 설정되지 않았습니다. 시스템 설정 > 메신저 연동관리에서 카카오 연동 서버(IP·API Key) 또는 카카오 비즈 액세스 토큰·발신 키를 입력하세요.",
+      },
+      { status: 503 }
+    );
+  }
 
   const senderNo = process.env.KAKAO_BIZ_SENDER_NO ?? "";
   if (!senderNo.trim()) {
@@ -76,6 +142,9 @@ export async function POST(request: NextRequest) {
       { status: 503 }
     );
   }
+
+  const baseUrl = process.env.KAKAO_BIZ_BASE_URL ?? "https://bizmsg-web.kakaoenterprise.com";
+  const sendUrl = `${baseUrl}/v2/send/kakao`;
 
   for (const phone of phones) {
     try {

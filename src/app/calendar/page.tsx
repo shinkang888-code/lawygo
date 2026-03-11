@@ -1,12 +1,14 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { ChevronLeft, ChevronRight, CalendarDays, Scale } from "lucide-react";
+import { ChevronLeft, ChevronRight, CalendarDays, Scale, Link2, Upload, FileDown, Loader2 } from "lucide-react";
 import Link from "next/link";
+import * as XLSX from "xlsx";
 import { mockCases, mockConsultations } from "@/lib/mockData";
 import { getDDay } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { getDeadlinesForDate } from "@/lib/deadlineStorage";
+import { openScourtMyCaseSearch } from "@/lib/scourtLinks";
 
 const WEEKDAYS = ["일", "월", "화", "수", "목", "금", "토"];
 const MONTHS = ["1월", "2월", "3월", "4월", "5월", "6월", "7월", "8월", "9월", "10월", "11월", "12월"];
@@ -91,6 +93,44 @@ export default function CalendarPage() {
     openManagePopup(`${y}-${m}-${d}`);
   };
 
+  const [downloading, setDownloading] = useState(false);
+  const handleCourtSync = () => {
+    openScourtMyCaseSearch();
+    fetchDeadlines();
+  };
+  const openExcelUploadPopup = () => {
+    const url = "/calendar/upload";
+    window.open(url, "calendar-excel-upload", "width=420,height=320,scrollbars=yes,resizable=yes");
+    const onMessage = (e: MessageEvent) => {
+      if (e.data?.type === "calendar-excel-upload-done") {
+        fetchDeadlines();
+        window.removeEventListener("message", onMessage);
+      }
+    };
+    window.addEventListener("message", onMessage);
+  };
+  const handleExcelDownload = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const res = await fetch(`/api/deadlines?dateFrom=${dateFrom}&dateTo=${dateTo}`);
+      const json = await res.json().catch(() => ({ data: [] }));
+      const list = (json.data ?? []) as Array<{ caseNumber?: string; date?: string; type?: string; court?: string; memo?: string }>;
+      const rows = list.map((d) => ({
+        사건번호: d.caseNumber ?? "",
+        진행일: d.date ?? "",
+        "기일명/내용": d.type ?? "기일",
+        기관: d.court ?? "",
+        비고: d.memo ?? "",
+      }));
+      const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ 사건번호: "", 진행일: "", "기일명/내용": "", 기관: "", 비고: "" }]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "기일");
+      XLSX.writeFile(wb, `기일_${year}년_${month + 1}월.xlsx`);
+    } finally {
+      setDownloading(false);
+    }
+  }, [dateFrom, dateTo, year, month]);
+
   const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
 
@@ -101,7 +141,7 @@ export default function CalendarPage() {
           <h1 className="text-xl font-bold text-slate-900">기일 달력</h1>
           <p className="text-sm text-text-muted mt-0.5">{year}년 {MONTHS[month]}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             type="button"
             onClick={openManagePopupToday}
@@ -109,10 +149,40 @@ export default function CalendarPage() {
           >
             <Scale size={14} /> 기일관리
           </button>
+          <span className="text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={handleCourtSync}
+            className="text-sm font-medium text-slate-700 hover:text-primary-600 hover:underline flex items-center gap-1"
+            title="대법원 나의사건검색 열기 후 달력 기일 최신으로 갱신"
+          >
+            <Link2 size={14} /> 법원기일연동
+          </button>
+          <span className="text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={openExcelUploadPopup}
+            className="text-sm font-medium text-slate-700 hover:text-primary-600 hover:underline flex items-center gap-1"
+            title="기일 엑셀 업로드 창 열기"
+          >
+            <Upload size={14} /> 엑셀업로드
+          </button>
+          <span className="text-slate-300">|</span>
+          <button
+            type="button"
+            onClick={handleExcelDownload}
+            disabled={downloading}
+            className="text-sm font-medium text-slate-700 hover:text-primary-600 hover:underline flex items-center gap-1 disabled:opacity-50"
+            title="현재 달 기일 엑셀 다운로드"
+          >
+            {downloading ? <Loader2 size={14} className="animate-spin" /> : <FileDown size={14} />}
+            엑셀다운
+          </button>
+          <span className="text-slate-300">|</span>
           <Link href="/consultation" className="text-sm font-medium text-primary-600 hover:underline flex items-center gap-1">
-            <CalendarDays size={14} /> 상담 일정
+            <CalendarDays size={14} /> 상담일정
           </Link>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 ml-1 sm:ml-2">
           <button onClick={prevMonth} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors">
             <ChevronLeft size={16} />
           </button>
@@ -120,7 +190,7 @@ export default function CalendarPage() {
             onClick={() => setCurrentDate(new Date(today.getFullYear(), today.getMonth(), 1))}
             className="text-sm font-medium text-primary-600 hover:underline px-2"
           >
-            오늘
+            이번달
           </button>
           <button onClick={nextMonth} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-600 transition-colors">
             <ChevronRight size={16} />
